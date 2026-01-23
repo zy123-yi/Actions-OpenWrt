@@ -59,7 +59,7 @@ jobs:
         uses: actions/create-github-app-token@v1
         with:
           # 确保这里引用的名称与你在 Settings 里创建的一模一样
-          app-id: ${{ secrets.APP_ID }}
+          app-id: ${{ vars.APP_IDAPP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Setup Credentials
