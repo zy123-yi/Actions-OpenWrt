@@ -58,9 +58,10 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
-          # 确保这里引用的名称与你在 Settings 里创建的一模一样
-          app-id: ${{ vars.APP_IDAPP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          # 因为 ID 在 Variables 下，所以用 vars.
+          app-id: ${{ vars.GITHUB_APP_ID }}
+          # 私钥必须在 Secrets 下，所以用 secrets.
+          private-key: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
 
       - name: Setup Credentials
         run: |
