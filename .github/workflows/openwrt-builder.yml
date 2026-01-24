@@ -78,20 +78,19 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf https://github.com/
 
-      - name: Clone custom packages
+      - name: Add custom feeds
         run: |
-          # 进入源码目录（假设你的源码在 openwrt 文件夹下）
           cd openwrt
-          mkdir -p package/custom
+          # 1. 如果 feeds.conf.default 不存在就创建一个，存在就追加
+          [ -e feeds.conf.default ] || touch feeds.conf.default
           
-          # 克隆 helloworld
-          git clone --depth 1 https://github.com/fw876/helloworld package/custom/helloworld
+          # 2. 强行插入正确的地址，使用特定的分支符号 ';' 代替命令行参数
+          echo "src-git helloworld https://github.com/fw876/helloworld.git" >> feeds.conf.default
+          echo "src-git passwall https://github.com/xiaorouji/openwrt-passwall.git;main" >> feeds.conf.default
+          echo "src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
           
-          # 克隆 Passwall 界面 (强制 main 分支)
-          git clone --depth 1 -b main https://github.com/xiaorouji/openwrt-passwall package/custom/passwall
-          
-          # 克隆 Passwall 核心依赖 (24.10 必须)
-          git clone --depth 1 -b main https://github.com/xiaorouji/openwrt-passwall-packages package/custom/passwall_packages
+          # 3. 打印一下确认写入成功（调试用）
+          cat feeds.conf.default
 
       - name: Update & Install feeds
         run: |
