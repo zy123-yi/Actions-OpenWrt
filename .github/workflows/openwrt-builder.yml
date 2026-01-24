@@ -81,12 +81,14 @@ jobs:
       - name: Clone custom packages
         run: |
           mkdir -p package/custom
-          # 修正后的 helloworld (如果需要)
-          git clone -b master https://github.com/fw876/helloworld.git package/custom/helloworld
-          
-          # 修正后的 Passwall 地址（核心：仓库名后缀改为 -packages）
-          git clone -b main https://github.com/xiaorouji/openwrt-passwall.git package/custom/passwall
-          git clone -b main https://github.com/xiaorouji/openwrt-passwall-packages.git package/custom/passwall_packages
+          # 1. 克隆 helloworld
+          git clone --depth 1 https://github.com/fw876/helloworld.git package/custom/helloworld
+    
+          # 2. 克隆 Passwall 界面 (注意这里强制指定 main 分支)
+          git clone --depth 1 -b main https://github.com/xiaorouji/openwrt-passwall.git package/custom/passwall
+    
+          # 3. 克隆 Passwall 核心依赖 (这是新版必须的，否则编译会报错)
+          git clone --depth 1 -b main https://github.com/xiaorouji/openwrt-passwall-packages.git package/custom/passwall_packages
 
       - name: Update & Install feeds
         run: |
