@@ -19,12 +19,18 @@
 #!/bin/bash
 
 #!/bin/bash
-#!/bin/bash
-# 移除旧定义
+
+# 1. 移除原有定义，防止重复报错
 sed -i '/helloworld/d' feeds.conf.default
 sed -i '/passwall/d' feeds.conf.default
 
-# 使用备用镜像地址
-echo 'src-git helloworld https://ghproxy.net/https://github.com/fw876/helloworld.git' >> feeds.conf.default
-echo 'src-git passwall https://ghproxy.net/https://github.com/xiaorouji/openwrt-passwall.git' >> feeds.conf.default
-echo 'src-git passwall_packages https://ghproxy.net/https://github.com/xiaorouji/openwrt-passwall-packages.git' >> feeds.conf.default
+# 2. 创建自定义插件目录（如果不存在）
+mkdir -p package/custom
+
+# 3. 直接克隆源码到 package/custom 目录下
+# 如果官方地址慢，可以在下面地址前加 https://mirror.ghproxy.com/ (尝试不同的前缀)
+git clone --depth=1 https://github.com/fw876/helloworld.git package/custom/helloworld
+git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall.git package/custom/passwall
+
+# 4. 获取 Passwall 所需的依赖包（这个非常关键，否则编译会报错）
+git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages.git package/custom/passwall_packages
