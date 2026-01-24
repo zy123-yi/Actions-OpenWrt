@@ -78,22 +78,7 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf https://github.com/
 
-      - name: Clone custom packages
-        run: |
-          # 创建并进入目录
-          mkdir -p package/custom
-          
-          # 1. 克隆 helloworld (先删再下)
-          rm -rf package/custom/helloworld
-          git clone --depth 1 https://github.com/fw876/helloworld.git package/custom/helloworld
-          
-          # 2. 克隆 Passwall 界面 (确保是 main 分支)
-          rm -rf package/custom/passwall
-          git clone --depth 1 -b main https://github.com/xiaorouji/openwrt-passwall.git package/custom/passwall
-          
-          # 3. 克隆 Passwall 核心依赖 (24.10 必须)
-          rm -rf package/custom/passwall_packages
-          git clone --depth 1 -b main https://github.com/xiaorouji/openwrt-passwall-packages.git package/custom/passwall_packages
+      
 
       - name: Update & Install feeds
         run: |
