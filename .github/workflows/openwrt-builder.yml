@@ -94,7 +94,9 @@ jobs:
         run: |
           cd openwrt
           make defconfig
-          make download -j8
+          # 增加重试机制，最多尝试 3 次下载
+          make download -j8 || make download -j1 V=s || make download -j1 V=s
+          # 检查下载是否真的成功
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
 
