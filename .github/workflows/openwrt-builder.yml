@@ -48,6 +48,11 @@ jobs:
           docker-images: true
           swap-storage: false
 
+      - name: Force Git HTTP/1.1
+        run: |
+          git config --global http.version HTTP/1.1
+          git config --global http.postBuffer 524288000
+      
       - name: Clone source code
         working-directory: /workdir
         run: |
