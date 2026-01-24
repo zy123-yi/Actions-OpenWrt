@@ -1,8 +1,18 @@
 name: OpenWrt Builder
 
 on:
-  repository_dispatch:
   workflow_dispatch:
+    inputs:
+      kernel_branch:
+        description: '选择源码分支 (决定内核版本)'
+        required: true
+        default: 'openwrt-23.05'
+        type: choice
+        options:
+          - 'openwrt-23.05'
+          - 'openwrt-22.03'
+          - 'openwrt-21.02'
+          - 'master'
 
 env:
   REPO_URL: https://github.com/coolsnowwolf/lede
@@ -54,10 +64,8 @@ jobs:
           git config --global http.postBuffer 524288000
       
       - name: Clone source code
-        working-directory: /workdir
         run: |
-          git clone $REPO_URL -b $REPO_BRANCH openwrt
-          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+          git clone -b ${{ inputs.kernel_branch }} --single-branch https://github.com/openwrt/openwrt.git openwrt
 
       - name: Generate App Token
         id: app-token
