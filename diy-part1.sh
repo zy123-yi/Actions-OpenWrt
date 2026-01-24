@@ -1,10 +1,3 @@
 #!/bin/bash
-
-# 1. 彻底移除旧的、可能冲突的定义
-sed -i '/helloworld/d' feeds.conf.default
-sed -i '/passwall/d' feeds.conf.default
-
-# 2. 通过 Feeds 注入新地址（由 OpenWrt 编译系统自动处理下载，更稳定）
-echo 'src-git helloworld https://github.com/fw876/helloworld.git' >>feeds.conf.default
-echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall.git;main' >>feeds.conf.default
-echo 'src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main' >>feeds.conf.default
+# 这个脚本现在只负责简单的文本替换
+sed -i 's/192.168.1.1/192.168.2.1/g' package/base-files/files/bin/config_generate
