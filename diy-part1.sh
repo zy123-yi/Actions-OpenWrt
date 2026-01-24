@@ -1,9 +1,10 @@
 #!/bin/bash
 
-# 移除原有定义
+# 1. 彻底移除旧的、可能冲突的定义
 sed -i '/helloworld/d' feeds.conf.default
 sed -i '/passwall/d' feeds.conf.default
 
-# 注意：不要在脚本里写 git clone，这很容易导致 Action 挂掉。
-# 请把 git clone 那几行移动到你的 .yml 文件中，
-# 或者使用上面的“建议 1”通过 feeds.conf.default 来引入。
+# 2. 通过 Feeds 注入新地址（由 OpenWrt 编译系统自动处理下载，更稳定）
+echo 'src-git helloworld https://github.com/fw876/helloworld.git' >>feeds.conf.default
+echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall.git;main' >>feeds.conf.default
+echo 'src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main' >>feeds.conf.default
