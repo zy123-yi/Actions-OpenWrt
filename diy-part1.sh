@@ -23,5 +23,5 @@
 sed -i '/passwall/d' feeds.conf.default
 
 # 2. 使用 gh-proxy 镜像地址，确保 100% 能克隆成功
-echo 'src-git passwall https://ghp.ci/https://github.com/xiaorouji/openwrt-passwall.git' >> feeds.conf.default
-echo 'src-git passwall_packages https://ghp.ci/https://github.com/xiaorouji/openwrt-passwall-packages.git' >> feeds.conf.default
+echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall.git' >> feeds.conf.default
+echo 'src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git' >> feeds.conf.default
