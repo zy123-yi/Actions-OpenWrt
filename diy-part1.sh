@@ -30,7 +30,12 @@ mkdir -p package/custom
 # 3. 直接克隆源码到 package/custom 目录下
 # 如果官方地址慢，可以在下面地址前加 https://mirror.ghproxy.com/ (尝试不同的前缀)
 git clone --depth=1 https://github.com/fw876/helloworld.git package/custom/helloworld
-git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall.git package/custom/passwall
+# git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall.git package/custom/passwall
 
 # 4. 获取 Passwall 所需的依赖包（这个非常关键，否则编译会报错）
-git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages.git package/custom/passwall_packages
+# git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages.git package/custom/passwall_packages
+# 克隆 Passwall 的网页插件源码 (luci-app-passwall)
+git clone -b main https://github.com/xiaorouji/openwrt-passwall.git package/custom/passwall
+
+# 克隆 Passwall 所需的核心依赖包 (passwall-packages)
+git clone -b main https://github.com/xiaorouji/openwrt-passwall-packages.git package/custom/passwall_packages
