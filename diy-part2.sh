@@ -20,6 +20,8 @@
 #sed -i 's/OpenWrt/P3TERX-Router/g' package/base-files/files/bin/config_generate
 #!/bin/bash
 
+rm -rf ./tmp
+
 # 1. 修改默认 IP 为 192.168.10.1 (避免与光猫 192.168.1.1 冲突)
 sed -i 's/192.168.1.1/192.168.2.1/g' package/base-files/files/bin/config_generate
 
