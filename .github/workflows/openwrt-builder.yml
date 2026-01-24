@@ -6,12 +6,12 @@ on:
       kernel_branch:
         description: '选择源码分支 (决定内核版本)'
         required: true
-        default: 'openwrt-23.05'
+        default: 'openwrt-24.10'
         type: choice
         options:
+          - 'openwrt-24.10'
           - 'openwrt-23.05'
           - 'openwrt-22.03'
-          - 'openwrt-21.02'
           - 'master'
 
 env:
