@@ -36,14 +36,17 @@ echo "CONFIG_PACKAGE_libavahi-dbus-support=y" >> .config
 
 #!/bin/bash
 
-# 1. 删除 Rust 编译器环境
-rm -rf feeds/packages/lang/rust
+#!/bin/bash
 
-# 2. 强行删除 helloworld 中依赖 Rust 的特定插件（这是报错的关键）
+# 1. 解决 Go 版本冲突：删除要求 Go 1.24 的 Hysteria
+rm -rf feeds/helloworld/hysteria
+
+# 2. 解决 Rust 冲突：删除之前报错的 Rust 环境和相关插件
+rm -rf feeds/packages/lang/rust
 rm -rf feeds/helloworld/shadowsocks-rust
 rm -rf feeds/helloworld/shadow-tls
 rm -rf feeds/helloworld/tuic-client
 rm -rf feeds/helloworld/dns2socks-rust
 
-# 3. 顺便清理掉那些会有警告的 Python 包（可选，让日志更清爽）
+# 3. 清理掉可能干扰的无用包
 rm -rf feeds/packages/net/onionshare-cli
