@@ -60,10 +60,16 @@ jobs:
 
       - name: Maximize Build Space & Swap
         run: |
-          sudo fallocate -l 10G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
+          # 1. 如果已有 swapfile 正在运行，先关闭它
+          sudo swapoff -a || true
+          
+          # 2. 创建一个新的 10GB Swap 文件（换个名字避开冲突）
+          sudo fallocate -l 10G /swapfile_build
+          sudo chmod 600 /swapfile_build
+          sudo mkswap /swapfile_build
+          sudo swapon /swapfile_build
+          
+          # 3. 确认空间
           free -h
           df -h
 
