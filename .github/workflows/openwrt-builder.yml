@@ -25,7 +25,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
@@ -40,7 +40,8 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift /usr/local/share/powershell /etc/mysql /etc/php
           sudo docker image prune --all --force
           sudo -E apt-get -qq update
-          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz xorriso msmtp ninja-build p7zip p7zip-full patch pkg-config python3 python3-pyelftools python3-setuptools python3-yaml qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils clang pkg-config zstd libcap-dev libacl1-dev libattr1-dev libssh-dev libpam0g-dev
+          # 适配 Ubuntu 24.04：使用 libncurses-dev 替换 libncurses5-dev，移除过时的 python2.7
+          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz xorriso msmtp ninja-build p7zip p7zip-full patch pkg-config python3 python3-pyelftools python3-setuptools python3-yaml qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils clang zstd libcap-dev libacl1-dev libattr1-dev libssh-dev libpam0g-dev
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
           sudo timedatectl set-timezone "$TZ"
@@ -60,18 +61,12 @@ jobs:
 
       - name: Maximize Build Space & Swap
         run: |
-          # 1. 如果已有 swapfile 正在运行，先关闭它
           sudo swapoff -a || true
-          
-          # 2. 创建一个新的 10GB Swap 文件（换个名字避开冲突）
           sudo fallocate -l 10G /swapfile_build
           sudo chmod 600 /swapfile_build
           sudo mkswap /swapfile_build
           sudo swapon /swapfile_build
-          
-          # 3. 确认空间
           free -h
-          df -h
 
       - name: Clone source code
         run: |
@@ -86,22 +81,16 @@ jobs:
           echo "src-git helloworld https://github.com/fw876/helloworld.git" >> feeds.conf.default
           echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
           echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
-          cat feeds.conf.default
 
       - name: Force Install Go 1.24 (System Wide)
         run: |
-          # 1. 下载真正的 Go 1.24
+          # 24.04 可能自带 1.22/1.23，必须暴力覆盖
           wget -q https://go.dev/dl/go1.24.0.linux-amd64.tar.gz
           sudo rm -rf /usr/local/go
           sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz
-          
-          # 2. 暴力覆盖系统原有的 go 软链接
-          # 这样无论脚本调用哪个路径的 go，都会指向 1.24
           sudo ln -sf /usr/local/go/bin/go /usr/bin/go
           sudo ln -sf /usr/local/go/bin/gofmt /usr/bin/gofmt
           sudo ln -sf /usr/local/go/bin/go /usr/local/bin/go
-          
-          # 3. 验证 (如果这里输出不是 1.24，说明系统有极高的权限锁死)
           go version
 
       - name: Update & Install feeds
@@ -113,10 +102,8 @@ jobs:
       - name: Install Rust and Cargo
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source $HOME/.cargo/env
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-      
-          
       - name: Load custom configuration
         run: |
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
@@ -131,12 +118,13 @@ jobs:
           make download -j8 || make download -j1 V=s
 
       - name: Compile the firmware
+        id: compile
         run: |
           cd openwrt
-          # 锁定 GO_HOST_PROG 变量，强制指向我们在上一步安装的 1.24 物理路径
-          # 同时设置 GOTOOLCHAIN=local 禁止它在编译过程中尝试降级或下载
           export GOTOOLCHAIN=local
+          # 24.04 下强制指定宿主机 Go 路径，解决 hysteria 依赖冲突
           make -j$(nproc) GO_HOST_PROG=/usr/bin/go || make -j1 V=s GO_HOST_PROG=/usr/bin/go
+          echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Organize files
         id: organize
