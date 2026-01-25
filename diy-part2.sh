@@ -32,3 +32,11 @@ sed -i 's/OpenWrt/Home-Router/g' package/base-files/files/bin/config_generate
 # 开启 mDNS 基础支持
 echo "CONFIG_PACKAGE_avahi-dbus-daemon=y" >> .config
 echo "CONFIG_PACKAGE_libavahi-dbus-support=y" >> .config
+#!/bin/bash
+
+# 1. 强行删除报错的 Rust 源码包
+rm -rf feeds/packages/lang/rust
+
+# 2. (可选) 顺便清理掉之前那些报警告的 Python 包，让日志更干净
+rm -rf feeds/packages/net/onionshare-cli
+rm -rf feeds/packages/lang/python/python-pika
