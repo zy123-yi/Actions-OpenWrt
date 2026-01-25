@@ -81,15 +81,16 @@ jobs:
       - name: Add custom feeds
         run: |
           cd openwrt
-          # 1. 如果 feeds.conf.default 不存在就创建一个，存在就追加
+          # 清除可能存在的旧配置
           [ -e feeds.conf.default ] || touch feeds.conf.default
+          sed -i '/helloworld/d' feeds.conf.default
+          sed -i '/passwall/d' feeds.conf.default
           
-          # 2. 强行插入正确的地址，使用特定的分支符号 ';' 代替命令行参数
+          # 使用 ghproxy 镜像加速，避开原地址解析失败的问题
           echo "src-git helloworld https://github.com/fw876/helloworld.git" >> feeds.conf.default
-          echo "src-git passwall https://github.com/xiaorouji/openwrt-passwall.git;main" >> feeds.conf.default
-          echo "src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
+          echo "src-git passwall https://mirror.ghproxy.com/https://github.com/xiaorouji/openwrt-passwall.git;main" >> feeds.conf.default
+          echo "src-git passwall_packages https://mirror.ghproxy.com/https://github.com/xiaorouji/openwrt-passwall-packages.git;main" >> feeds.conf.default
           
-          # 3. 打印一下确认写入成功（调试用）
           cat feeds.conf.default
 
       - name: Update & Install feeds
