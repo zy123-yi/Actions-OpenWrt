@@ -104,14 +104,7 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           source $HOME/.cargo/env
 
-      - name: Pre-build Rust Host Tool
-        run: |
-          cd openwrt
-          # 关键：先生成默认配置，防止它跳转到 menuconfig
-          [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
-          make defconfig
-          # 然后再编译
-          make package/feeds/packages/rust/host/compile -j$(nproc) || make package/feeds/packages/rust/host/compile -j1 V=s
+      
           
       - name: Load custom configuration
         run: |
