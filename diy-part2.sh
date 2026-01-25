@@ -32,21 +32,3 @@ sed -i 's/OpenWrt/Home-Router/g' package/base-files/files/bin/config_generate
 # 开启 mDNS 基础支持
 echo "CONFIG_PACKAGE_avahi-dbus-daemon=y" >> .config
 echo "CONFIG_PACKAGE_libavahi-dbus-support=y" >> .config
-#!/bin/bash
-
-#!/bin/bash
-
-#!/bin/bash
-
-# 1. 解决 Go 版本冲突：删除要求 Go 1.24 的 Hysteria
-rm -rf feeds/helloworld/hysteria
-
-# 2. 解决 Rust 冲突：删除之前报错的 Rust 环境和相关插件
-rm -rf feeds/packages/lang/rust
-rm -rf feeds/helloworld/shadowsocks-rust
-rm -rf feeds/helloworld/shadow-tls
-rm -rf feeds/helloworld/tuic-client
-rm -rf feeds/helloworld/dns2socks-rust
-
-# 3. 清理掉可能干扰的无用包
-rm -rf feeds/packages/net/onionshare-cli
