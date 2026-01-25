@@ -33,11 +33,11 @@ sed -i 's/OpenWrt/Home-Router/g' package/base-files/files/bin/config_generate
 echo "CONFIG_PACKAGE_avahi-dbus-daemon=y" >> .config
 echo "CONFIG_PACKAGE_libavahi-dbus-support=y" >> .config
 # 强制关闭 24.10 中不稳定的 Rust 及其相关统计插件，确保固件轻量稳定
-sed -i 's/CONFIG_PACKAGE_rust=y/CONFIG_PACKAGE_rust=n/g' .config
-sed -i 's/CONFIG_PACKAGE_luci-app-statistics=y/CONFIG_PACKAGE_luci-app-statistics=n/g' .config
+# sed -i 's/CONFIG_PACKAGE_rust=y/CONFIG_PACKAGE_rust=n/g' .config
+# sed -i 's/CONFIG_PACKAGE_luci-app-statistics=y/CONFIG_PACKAGE_luci-app-statistics=n/g' .config
 # 在 diy-part2.sh 中加入
 # 强制让 Go 相关的 Makefile 信任宿主机环境中的 go 路径
 sed -i 's/GO_HOST_PROG:=.*/GO_HOST_PROG:=\/usr\/bin\/go/g' feeds/packages/lang/golang/golang-values.mk 2>/dev/null || true
 # 如果 Go 版本依然冲突，直接删掉这个惹祸的包，不编译它
-rm -rf feeds/helloworld/hysteria
-rm -rf feeds/helloworld/luci-app-hysteria
+# rm -rf feeds/helloworld/hysteria
+# rm -rf feeds/helloworld/luci-app-hysteria
