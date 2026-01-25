@@ -88,10 +88,19 @@ jobs:
           echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
           cat feeds.conf.default
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.x'
+      - name: Setup Go 1.24 (Force)
+        run: |
+          # 1. 下载并解压真正的 Go 1.24
+          curl -L https://go.dev/dl/go1.24.0.linux-amd64.tar.gz -o go1.24.tar.gz
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf go1.24.tar.gz
+          
+          # 2. 强制写入环境变量到系统路径
+          echo "/usr/local/go/bin" >> $GITHUB_PATH
+          
+          # 3. 立即在当前 shell 生效并验证
+          export PATH=/usr/local/go/bin:$PATH
+          go version
 
       - name: Update & Install feeds
         run: |
@@ -122,10 +131,10 @@ jobs:
       - name: Compile the firmware
         id: compile
         run: |
-          cd openwrt
-          # 1. 强制让环境变量使用 setup-go 安装的版本
-          export PATH=$PATH_TO_GO_BIN:$PATH
           
+          # 1. 强制让环境变量使用 setup-go 安装的版本
+          export PATH=/usr/local/go/bin:$PATH
+          cd openwrt
           # 2. 核心修正：通过命令行参数强制指定 Go 的路径
           # 我们把系统的 go 路径传给编译脚本
           SYSTEM_GO=$(which go)
