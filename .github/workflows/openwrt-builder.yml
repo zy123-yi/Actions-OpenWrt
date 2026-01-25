@@ -112,10 +112,11 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24' # 强制指定使用 1.24 版本
+          go-version: '1.25.x' # 强制指定使用 1.24 版本
 
       - name: Verify Go version
         run: go version # 验证一下是否生效
+        
       - name: Update & Install feeds
         run: |
           cd openwrt
@@ -148,11 +149,13 @@ jobs:
       - name: Compile the firmware
         id: compile
         run: |
+          export PATH=$PATH_TO_GO_BIN:$PATH
+          
           cd openwrt
           echo -e "$(nproc) thread compile"
-          make -j$(nproc) || make -j1 V=s
+          make -j$(nproc) GO_HOST_PROG=$(which go) || make -j1 V=s GO_HOST_PROG=$(which go)
           echo "status=success" >> $GITHUB_OUTPUT
-
+          
       - name: Organize files
         id: organize
         if: steps.compile.outputs.status == 'success'
