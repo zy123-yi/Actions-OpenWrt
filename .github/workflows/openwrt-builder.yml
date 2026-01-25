@@ -88,18 +88,20 @@ jobs:
           echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
           cat feeds.conf.default
 
-      - name: Setup Go 1.24 (Force)
+      - name: Force Install Go 1.24 (System Wide)
         run: |
-          # 1. 下载并解压真正的 Go 1.24
-          curl -L https://go.dev/dl/go1.24.0.linux-amd64.tar.gz -o go1.24.tar.gz
+          # 1. 下载真正的 Go 1.24
+          wget -q https://go.dev/dl/go1.24.0.linux-amd64.tar.gz
           sudo rm -rf /usr/local/go
-          sudo tar -C /usr/local -xzf go1.24.tar.gz
+          sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz
           
-          # 2. 强制写入环境变量到系统路径
-          echo "/usr/local/go/bin" >> $GITHUB_PATH
+          # 2. 暴力覆盖系统原有的 go 软链接
+          # 这样无论脚本调用哪个路径的 go，都会指向 1.24
+          sudo ln -sf /usr/local/go/bin/go /usr/bin/go
+          sudo ln -sf /usr/local/go/bin/gofmt /usr/bin/gofmt
+          sudo ln -sf /usr/local/go/bin/go /usr/local/bin/go
           
-          # 3. 立即在当前 shell 生效并验证
-          export PATH=/usr/local/go/bin:$PATH
+          # 3. 验证 (如果这里输出不是 1.24，说明系统有极高的权限锁死)
           go version
 
       - name: Update & Install feeds
