@@ -129,22 +129,11 @@ jobs:
           make download -j8 || make download -j1 V=s
 
       - name: Compile the firmware
-        id: compile
         run: |
-          
-          # 1. 强制让环境变量使用 setup-go 安装的版本
+          # 再次强制声明路径，确保 make 进程能继承到
           export PATH=/usr/local/go/bin:$PATH
           cd openwrt
-          # 2. 核心修正：通过命令行参数强制指定 Go 的路径
-          # 我们把系统的 go 路径传给编译脚本
-          SYSTEM_GO=$(which go)
-          echo "Using Go from: $SYSTEM_GO"
-          $SYSTEM_GO version
-          
-          # 3. 开始编译，增加 GO_HOST_PROG 参数
-          make -j$(nproc) GO_HOST_PROG=$SYSTEM_GO || make -j1 V=s GO_HOST_PROG=$SYSTEM_GO
-          
-          echo "status=success" >> $GITHUB_OUTPUT
+          make -j$(nproc) GO_HOST_PROG=/usr/local/go/bin/go || make -j1 V=s GO_HOST_PROG=/usr/local/go/bin/go
 
       - name: Organize files
         id: organize
