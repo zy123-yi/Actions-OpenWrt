@@ -34,9 +34,16 @@ echo "CONFIG_PACKAGE_avahi-dbus-daemon=y" >> .config
 echo "CONFIG_PACKAGE_libavahi-dbus-support=y" >> .config
 #!/bin/bash
 
-# 1. 强行删除报错的 Rust 源码包
+#!/bin/bash
+
+# 1. 删除 Rust 编译器环境
 rm -rf feeds/packages/lang/rust
 
-# 2. (可选) 顺便清理掉之前那些报警告的 Python 包，让日志更干净
+# 2. 强行删除 helloworld 中依赖 Rust 的特定插件（这是报错的关键）
+rm -rf feeds/helloworld/shadowsocks-rust
+rm -rf feeds/helloworld/shadow-tls
+rm -rf feeds/helloworld/tuic-client
+rm -rf feeds/helloworld/dns2socks-rust
+
+# 3. 顺便清理掉那些会有警告的 Python 包（可选，让日志更清爽）
 rm -rf feeds/packages/net/onionshare-cli
-rm -rf feeds/packages/lang/python/python-pika
