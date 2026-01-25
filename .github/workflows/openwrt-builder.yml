@@ -56,7 +56,19 @@ jobs:
           haskell: true
           large-packages: true
           docker-images: true
-          swap-storage: true
+          swap-storage: false # 这里先设为 false，我们下面手动开更大的
+
+      - name: Maximize Build Space & Swap
+        run: |
+          # 创建一个 10GB 的 Swap 文件，专门给 Rust 编译用
+          sudo fallocate -l 10G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          
+          # 打印空间情况确认
+          free -h
+          df -h
 
       - name: Force Git HTTP/1.1
         run: |
