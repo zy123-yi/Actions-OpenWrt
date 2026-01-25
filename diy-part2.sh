@@ -35,3 +35,6 @@ echo "CONFIG_PACKAGE_libavahi-dbus-support=y" >> .config
 # 强制关闭 24.10 中不稳定的 Rust 及其相关统计插件，确保固件轻量稳定
 sed -i 's/CONFIG_PACKAGE_rust=y/CONFIG_PACKAGE_rust=n/g' .config
 sed -i 's/CONFIG_PACKAGE_luci-app-statistics=y/CONFIG_PACKAGE_luci-app-statistics=n/g' .config
+# 在 diy-part2.sh 中加入
+# 强制让 Go 相关的 Makefile 信任宿主机环境中的 go 路径
+sed -i 's/GO_HOST_PROG:=.*/GO_HOST_PROG:=\/usr\/bin\/go/g' feeds/packages/lang/golang/golang-values.mk 2>/dev/null || true
