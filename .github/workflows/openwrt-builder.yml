@@ -15,7 +15,7 @@ on:
           - 'master'
 
 env:
-  REPO_URL: https://github.com/coolsnowwolf/lede
+  REPO_URL: https://github.com/openwrt/openwrt.git
   REPO_BRANCH: master
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
@@ -34,28 +34,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialization environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        # 1. 深度清理磁盘空间
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift /usr/local/share/powershell /etc/mysql /etc/php
-        sudo docker image prune --all --force
-        
-        # 2. 修复依赖冲突并更新
-        sudo -E apt-get -qq update
-        
-        # 3. 安装必备依赖 (移除了会导致冲突的 python2.7，改用更兼容的 pkgconf)
-        # 补充了 24.10 编译 Rust 和内核必需的现代库
-        sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz xorriso msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools python3-yaml qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils clang pkg-config zstd libcap-dev libacl1-dev libattr1-dev libssh-dev libpam0g-dev
-        
-        # 4. 清理
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
-        
-        # 5. 设置
-        sudo timedatectl set-timezone "$TZ"
-        sudo mkdir -p /workdir
-        sudo chown $USER:$GROUPS /workdir
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift /usr/local/share/powershell /etc/mysql /etc/php
+          sudo docker image prune --all --force
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz xorriso msmtp ninja-build p7zip p7zip-full patch pkg-config python3 python3-pyelftools python3-setuptools python3-yaml qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils clang pkg-config zstd libcap-dev libacl1-dev libattr1-dev libssh-dev libpam0g-dev
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+          sudo timedatectl set-timezone "$TZ"
+          sudo mkdir -p /workdir
+          sudo chown $USER:$GROUPS /workdir
+
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -65,141 +56,25 @@ jobs:
           haskell: true
           large-packages: true
           docker-images: true
-          swap-storage: false # 这里先设为 false，我们下面手动开更大的
+          swap-storage: false
 
       - name: Maximize Build Space & Swap
         run: |
-          # 创建一个 10GB 的 Swap 文件，专门给 Rust 编译用
           sudo fallocate -l 10G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
-          
-          # 打印空间情况确认
           free -h
           df -h
 
-      - name: Force Git HTTP/1.1
-        run: |
-          git config --global http.version HTTP/1.1
-          git config --global http.postBuffer 524288000
-      
       - name: Clone source code
         run: |
-          git clone -b ${{ inputs.kernel_branch }} --single-branch https://github.com/openwrt/openwrt.git openwrt
-
-      - name: Generate App Token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.APP_IDAPP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Setup Credentials
-        run: |
-          git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf https://github.com/
+          git clone --depth 1 -b ${{ inputs.kernel_branch }} https://github.com/openwrt/openwrt.git openwrt
 
       - name: Add custom feeds
         run: |
           cd openwrt
-          # 1. 彻底清空干扰
           [ -e feeds.conf.default ] || touch feeds.conf.default
           sed -i '/helloworld/d' feeds.conf.default
           sed -i '/passwall/d' feeds.conf.default
-          
-          # 2. 尝试使用另一种地址写法 (去掉 .git 且不带分号，让 feeds 自己去匹配)
-          echo "src-git helloworld https://github.com/fw876/helloworld" >> feeds.conf.default
-          
-          # 3. 如果 xiaorouji 的原地址一直报 404，我们改用其对应的同步镜像地址
-          # 这里换成另一个常用的、更兼容 Action 环境的地址格式
-          echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git" >> feeds.conf.default
-          echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git" >> feeds.conf.default
-          
-          # 强行指定具体的分支（在 update 步骤处理）
-          cat feeds.conf.default
-          
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.x' # 强制指定使用 1.24 版本
-
-      - name: Verify Go version
-        run: go version # 验证一下是否生效
-        
-      - name: Update & Install feeds
-        run: |
-          cd openwrt
-          # 彻底删除手动 clone 的残留目录，防止冲突
-          rm -rf package/custom/passwall
-          rm -rf package/custom/passwall_packages
-          rm -rf package/custom/helloworld
-          
-          # 确保 feeds 更新并强制安装
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
-          ./scripts/feeds install libev libpam libtirpc liblzma libnetsnmp
-
-      - name: Install Rust and Cargo
-        run: |
-          # 确保环境中有最新版的 Rust 和 Cargo
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source $HOME/.cargo/env
-          rustc --version
-          
-      - name: Pre-build Rust Host Tool
-        run: |
-          # 提前进入 rust 目录尝试单独编译 host 工具，观察更详细的报错
-          cd openwrt
-          make package/feeds/packages/rust/host/compile -j$(nproc) || make package/feeds/packages/rust/host/compile -j1 V=s
-
-      - name: Load custom configuration
-        run: |
-          [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-          chmod +x $DIY_P2_SH
-          cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P2_SH
-
-      - name: Download package
-        run: |
-          cd openwrt
-          make defconfig
-          # 增加重试机制，最多尝试 3 次下载
-          make download -j8 || make download -j1 V=s || make download -j1 V=s
-          # 检查下载是否真的成功
-          find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -exec rm -f {} \;
-
-      - name: Compile the firmware
-        id: compile
-        run: |
-          export PATH=$PATH_TO_GO_BIN:$PATH
-          
-          cd openwrt
-          echo -e "$(nproc) thread compile"
-          make -j$(nproc) GO_HOST_PROG=$(which go) || make -j1 V=s GO_HOST_PROG=$(which go)
-          echo "status=success" >> $GITHUB_OUTPUT
-          
-      - name: Organize files
-        id: organize
-        if: steps.compile.outputs.status == 'success'
-        run: |
-          cd openwrt/bin/targets/*/*
-          rm -rf packages
-          echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: Upload firmware directory
-        uses: actions/upload-artifact@v4
-        if: steps.organize.outputs.status == 'success'
-        with:
-          name: OpenWrt_firmware
-          path: ${{ env.FIRMWARE }}
-
-      - name: Upload firmware to release
-        uses: softprops/action-gh-release@v2
-        if: steps.organize.outputs.status == 'success'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.run_id }}
-          files: ${{ env.FIRMWARE }}/*
+          echo "src-git helloworld https://github.com/fw876/helloworld.git" >> feeds.conf
