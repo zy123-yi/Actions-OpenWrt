@@ -96,7 +96,14 @@ jobs:
           
           # 强行指定具体的分支（在 update 步骤处理）
           cat feeds.conf.default
+          
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24' # 强制指定使用 1.24 版本
 
+      - name: Verify Go version
+        run: go version # 验证一下是否生效
       - name: Update & Install feeds
         run: |
           cd openwrt
