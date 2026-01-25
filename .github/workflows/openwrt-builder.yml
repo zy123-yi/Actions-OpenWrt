@@ -91,8 +91,8 @@ jobs:
           
           # 3. 如果 xiaorouji 的原地址一直报 404，我们改用其对应的同步镜像地址
           # 这里换成另一个常用的、更兼容 Action 环境的地址格式
-          echo "src-git passwall https://github.com/xiaorouji/openwrt-passwall.git" >> feeds.conf.default
-          echo "src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git" >> feeds.conf.default
+          echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git" >> feeds.conf.default
+          echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git" >> feeds.conf.default
           
           # 强行指定具体的分支（在 update 步骤处理）
           cat feeds.conf.default
