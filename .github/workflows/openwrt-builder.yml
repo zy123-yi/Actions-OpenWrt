@@ -132,10 +132,11 @@ jobs:
 
       - name: Compile the firmware
         run: |
-          # 再次强制声明路径，确保 make 进程能继承到
-          export PATH=/usr/local/go/bin:$PATH
           cd openwrt
-          make -j$(nproc) GO_HOST_PROG=/usr/local/go/bin/go || make -j1 V=s GO_HOST_PROG=/usr/local/go/bin/go
+          # 锁定 GO_HOST_PROG 变量，强制指向我们在上一步安装的 1.24 物理路径
+          # 同时设置 GOTOOLCHAIN=local 禁止它在编译过程中尝试降级或下载
+          export GOTOOLCHAIN=local
+          make -j$(nproc) GO_HOST_PROG=/usr/bin/go || make -j1 V=s GO_HOST_PROG=/usr/bin/go
 
       - name: Organize files
         id: organize
