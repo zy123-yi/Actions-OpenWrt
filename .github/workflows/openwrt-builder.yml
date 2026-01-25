@@ -77,4 +77,66 @@ jobs:
           [ -e feeds.conf.default ] || touch feeds.conf.default
           sed -i '/helloworld/d' feeds.conf.default
           sed -i '/passwall/d' feeds.conf.default
-          echo "src-git helloworld https://github.com/fw876/helloworld.git" >> feeds.conf
+          echo "src-git helloworld https://github.com/fw876/helloworld.git" >> feeds.conf.default
+          echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
+          echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
+          cat feeds.conf.default
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Update & Install feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Install Rust and Cargo
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+
+      - name: Pre-build Rust Host Tool
+        run: |
+          cd openwrt
+          make package/feeds/packages/rust/host/compile -j$(nproc) || make package/feeds/packages/rust/host/compile -j1 V=s
+
+      - name: Load custom configuration
+        run: |
+          [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+          chmod +x $DIY_P2_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P2_SH
+
+      - name: Download package
+        run: |
+          cd openwrt
+          make defconfig
+          make download -j8 || make download -j1 V=s
+
+      - name: Compile the firmware
+        id: compile
+        run: |
+          cd openwrt
+          make -j$(nproc) || make -j1 V=s
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Organize files
+        id: organize
+        if: steps.compile.outputs.status == 'success'
+        run: |
+          cd openwrt/bin/targets/*/*
+          rm -rf packages
+          echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Upload firmware to release
+        uses: softprops/action-gh-release@v2
+        if: steps.organize.outputs.status == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.run_id }}
+          files: ${{ env.FIRMWARE }}/*
