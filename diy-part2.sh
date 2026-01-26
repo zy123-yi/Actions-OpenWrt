@@ -32,12 +32,23 @@ sed -i 's/OpenWrt/Home-Router/g' package/base-files/files/bin/config_generate
 # 开启 mDNS 基础支持
 echo "CONFIG_PACKAGE_avahi-dbus-daemon=y" >> .config
 echo "CONFIG_PACKAGE_libavahi-dbus-support=y" >> .config
-# 强制关闭 24.10 中不稳定的 Rust 及其相关统计插件，确保固件轻量稳定
-sed -i 's/CONFIG_PACKAGE_rust=y/CONFIG_PACKAGE_rust=n/g' .config
-sed -i 's/CONFIG_PACKAGE_luci-app-statistics=y/CONFIG_PACKAGE_luci-app-statistics=n/g' .config
-# 在 diy-part2.sh 中加入
-# 强制让 Go 相关的 Makefile 信任宿主机环境中的 go 路径
-sed -i 's/GO_HOST_PROG:=.*/GO_HOST_PROG:=\/usr\/bin\/go/g' feeds/packages/lang/golang/golang-values.mk 2>/dev/null || true
-# 如果 Go 版本依然冲突，直接删掉这个惹祸的包，不编译它
+#!/bin/bash
+
+# 1. 屏蔽 Hysteria (导致你目前报错的主要原因)
 rm -rf feeds/helloworld/hysteria
 rm -rf feeds/helloworld/luci-app-hysteria
+rm -rf feeds/passwall_packages/hysteria
+rm -rf feeds/passwall_packages/hysteria2
+
+# 2. 屏蔽其他潜在的 Go 冲突包
+rm -rf feeds/helloworld/tuic-client
+rm -rf feeds/helloworld/naiveproxy
+rm -rf feeds/passwall_packages/tuic-client
+rm -rf feeds/passwall_packages/naiveproxy
+
+# 3. 屏蔽 Rust 报错包 (如果 Rust 也报错，建议关掉这个不常用的)
+rm -rf feeds/packages/lang/rust
+rm -rf feeds/packages/utils/onionshare-cli
+
+# 4. 强制清理残留
+./scripts/feeds install -a
