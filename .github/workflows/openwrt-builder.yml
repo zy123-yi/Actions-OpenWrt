@@ -84,24 +84,21 @@ jobs:
       - name: Add custom feeds
         run: |
           cd openwrt
-          [ -e feeds.conf.default ] || touch feeds.conf.default
-          sed -i '/helloworld/d' feeds.conf.default
-          sed -i '/passwall/d' feeds.conf.default
-          echo "src-git helloworld https://github.com/fw876/helloworld.git" >> feeds.conf.default
-          echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
-          echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
+          # 1. 彻底清空并重写为 GitHub 镜像源，解决 503 报错
+          cat > feeds.conf.default <<EOF
+          src-git packages https://github.com/openwrt/packages.git;${{ inputs.kernel_branch }}
+          src-git luci https://github.com/openwrt/luci.git;${{ inputs.kernel_branch }}
+          src-git routing https://github.com/openwrt/routing.git;${{ inputs.kernel_branch }}
+          src-git telephony https://github.com/openwrt/telephony.git;${{ inputs.kernel_branch }}
+          src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main
+          src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main
+          src-git ower https://github.com/sbwml/luci-app-mosdns
+          EOF
+          
+          # 2. 移除旧的 helloworld 缓存（防止冲突）
+          rm -rf feeds/helloworld
 
-      - name: Force Install Go 1.24 (System Wide)
-        run: |
-          # 24.04 可能自带 1.22/1.23，必须暴力覆盖
-          wget -q https://go.dev/dl/go1.24.0.linux-amd64.tar.gz
-          sudo rm -rf /usr/local/go
-          sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz
-          sudo ln -sf /usr/local/go/bin/go /usr/bin/go
-          sudo ln -sf /usr/local/go/bin/gofmt /usr/bin/gofmt
-          sudo ln -sf /usr/local/go/bin/go /usr/local/bin/go
-          go version
-
+      
       - name: Update & Install feeds
         run: |
           cd openwrt
