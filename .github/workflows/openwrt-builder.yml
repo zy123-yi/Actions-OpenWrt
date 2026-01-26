@@ -64,7 +64,18 @@ jobs:
           chmod +x $DIY_P1_SH
           ./$DIY_P1_SH
           cd openwrt
+          # --- 核心修复：强制全局替换 503 报错的官方源 ---
+          sed -i 's/git.openwrt.org\/feed\/packages/github.com\/openwrt\/packages/g' feeds.conf.default
+          sed -i 's/git.openwrt.org\/project\/luci/github.com\/openwrt\/luci/g' feeds.conf.default
+          sed -i 's/git.openwrt.org\/feed\/routing/github.com\/openwrt\/routing/g' feeds.conf.default
+          sed -i 's/git.openwrt.org\/feed\/telephony/github.com\/openwrt\/telephony/g' feeds.conf.default
+          
+          # 确保 feeds.conf 也不存在干扰
+          cp feeds.conf.default feeds.conf
+          
+          # 更新并安装
           ./scripts/feeds update -a
+          ./scripts/feeds install -a
 
       - name: Install feeds
         run: |
