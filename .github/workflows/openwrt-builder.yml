@@ -126,9 +126,10 @@ jobs:
         id: compile
         run: |
           cd openwrt
-          export GOTOOLCHAIN=local
-          # 24.04 下强制指定宿主机 Go 路径，解决 hysteria 依赖冲突
-          make -j1 GO_HOST_PROG=/usr/bin/go || make -j1 GO_HOST_PROG=/usr/bin/go V=s
+          echo -e "$(nproc) thread compile"
+          # 建议使用 -j2 或 -j$(($(nproc) + 1))
+          # 对于你的配置（含 Sing-Box + gVisor），建议用 -j2 甚至 -j1 保证通过率
+          make -j2 GO_HOST_PROG=/usr/bin/go V=s || make -j1 V=s GO_HOST_PROG=/usr/bin/go
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Organize files
