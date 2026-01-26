@@ -128,7 +128,7 @@ jobs:
           cd openwrt
           export GOTOOLCHAIN=local
           # 24.04 下强制指定宿主机 Go 路径，解决 hysteria 依赖冲突
-          make -j$(nproc) GO_HOST_PROG=/usr/bin/go || make -j1 GO_HOST_PROG=/usr/bin/go
+          make -j1 GO_HOST_PROG=/usr/bin/go || make -j1 GO_HOST_PROG=/usr/bin/go V=s
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Organize files
