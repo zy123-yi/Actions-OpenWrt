@@ -59,6 +59,19 @@ jobs:
           git clone --depth 1 -b ${{ inputs.kernel_branch }} $REPO_URL openwrt
           ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
+      - name: 腾出磁盘空间 (Free Disk Space)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf /etc/apt/sources.list.d/*
+          sudo docker image prune -a -f
+          sudo apt-get update
+          sudo apt-get autoremove -y
+          sudo apt-get autoclean -y
+          sudo apt-get clean
+
       - name: Load custom feeds (P1)
         run: |
           chmod +x $DIY_P1_SH
