@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 1. 重写 feeds 配置文件，全部改用 GitHub 镜像源（解决 503 报错）
+# 1. 强制重写 feeds.conf.default 和 feeds.conf，改用 GitHub 镜像源并彻底移除 helloworld
 cat > feeds.conf.default <<EOF
 src-git packages https://github.com/openwrt/packages.git;openwrt-24.10
 src-git luci https://github.com/openwrt/luci.git;openwrt-24.10
@@ -11,7 +11,14 @@ src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;m
 src-git ower https://github.com/sbwml/luci-app-mosdns
 EOF
 
-# 2. 增加 Git 重试机制（防止由于网络抖动导致的 503/504）
+# 同步覆盖 feeds.conf（防止某些 Actions 模板优先读取此文件）
+cp feeds.conf.default feeds.conf
+
+# 2. 物理删除残留目录 (解决 install feeds 环节报错的关键)
+rm -rf feeds/helloworld
+rm -rf package/feeds/helloworld
+
+# 3. 增加 Git 网络容错机制
 git config --global http.postBuffer 524288000
 git config --global https.postBuffer 524288000
 git config --global core.compression 0
