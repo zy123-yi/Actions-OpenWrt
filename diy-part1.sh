@@ -1,9 +1,6 @@
 #!/bin/bash
 
-# 1. 如果 feeds.conf.default 不存在，就创建一个，或者直接修改 feeds.conf
-[ ! -f feeds.conf.default ] && cp feeds.conf feeds.conf.default
-
-# 2. 彻底清空并重新写入 feeds 配置（确保只保留 PassWall）
+# 1. 重写 feeds 配置文件，全部改用 GitHub 镜像源（解决 503 报错）
 cat > feeds.conf.default <<EOF
 src-git packages https://github.com/openwrt/packages.git;openwrt-24.10
 src-git luci https://github.com/openwrt/luci.git;openwrt-24.10
@@ -14,6 +11,7 @@ src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;m
 src-git ower https://github.com/sbwml/luci-app-mosdns
 EOF
 
-# 3. 强制删除可能存在的 helloworld 缓存文件夹（双重保险）
-rm -rf package/feeds/helloworld
-rm -rf feeds/helloworld
+# 2. 增加 Git 重试机制（防止由于网络抖动导致的 503/504）
+git config --global http.postBuffer 524288000
+git config --global https.postBuffer 524288000
+git config --global core.compression 0
