@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       kernel_branch:
-        description: '选择源码分支 (决定内核版本)'
+        description: '选择源码分支'
         required: true
         default: 'openwrt-24.10'
         type: choice
@@ -37,36 +37,11 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift /usr/local/share/powershell /etc/mysql /etc/php
-          sudo docker image prune --all --force
           sudo -E apt-get -qq update
-          # 适配 Ubuntu 24.04：使用 libncurses-dev 替换 libncurses5-dev，移除过时的 python2.7
           sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz xorriso msmtp ninja-build p7zip p7zip-full patch pkg-config python3 python3-pyelftools python3-setuptools python3-yaml qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils clang zstd libcap-dev libacl1-dev libattr1-dev libssh-dev libpam0g-dev
-          sudo apt-get install -y libelf-dev zstd libssl-dev
-          sudo -E apt-get -qq autoremove --purge
-          sudo -E apt-get -qq clean
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
-
-      - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
-
-      - name: Cleanup Disk
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
 
       - name: Maximize Build Space & Swap
         run: |
@@ -78,35 +53,25 @@ jobs:
           free -h
 
       - name: Clone source code
+        working-directory: /workdir
         run: |
-          git clone --depth 1 -b ${{ inputs.kernel_branch }} https://github.com/openwrt/openwrt.git openwrt
+          df -hT $PWD
+          git clone --depth 1 -b ${{ inputs.kernel_branch }} $REPO_URL openwrt
+          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-      - name: Add custom feeds
+      - name: Load custom feeds (P1)
         run: |
-          cd openwrt
-          # 1. 彻底清空并重写为 GitHub 镜像源，解决 503 报错
-          cat > feeds.conf.default <<EOF
-          src-git packages https://github.com/openwrt/packages.git;${{ inputs.kernel_branch }}
-          src-git luci https://github.com/openwrt/luci.git;${{ inputs.kernel_branch }}
-          src-git routing https://github.com/openwrt/routing.git;${{ inputs.kernel_branch }}
-          src-git telephony https://github.com/openwrt/telephony.git;${{ inputs.kernel_branch }}
-          src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main
-          src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main
-          src-git ower https://github.com/sbwml/luci-app-mosdns
-          EOF
-          
-          # 2. 移除旧的 helloworld 缓存（防止冲突）
-          rm -rf feeds/helloworld
-
-      
-      - name: Update & Install feeds
-        run: |
+          chmod +x $DIY_P1_SH
+          ./$DIY_P1_SH
           cd openwrt
           ./scripts/feeds update -a
+
+      - name: Install feeds
+        run: |
+          cd openwrt
           ./scripts/feeds install -a
 
-      
-      - name: Load custom configuration
+      - name: Load custom configuration (P2)
         run: |
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
           chmod +x $DIY_P2_SH
@@ -117,16 +82,17 @@ jobs:
         run: |
           cd openwrt
           make defconfig
-          make download -j8 || make download -j1 V=s
+          make download -j8
+          find dl -size -1024c -exec ls -l {} \;
+          find dl -size -1024c -exec rm -f {} \;
 
       - name: Compile the firmware
         id: compile
         run: |
           cd openwrt
           echo -e "$(nproc) thread compile"
-          # 建议使用 -j2 或 -j$(($(nproc) + 1))
-          # 对于你的配置（含 Sing-Box + gVisor），建议用 -j2 甚至 -j1 保证通过率
-          make -j2 GO_HOST_PROG=/usr/bin/go V=s || make -j1 V=s GO_HOST_PROG=/usr/bin/go
+          # 使用 -j2 配合 Go 环境变量，兼顾速度与稳定性
+          make -j2 GO_HOST_PROG=/usr/bin/go V=s || make -j1 GO_HOST_PROG=/usr/bin/go V=s
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Organize files
