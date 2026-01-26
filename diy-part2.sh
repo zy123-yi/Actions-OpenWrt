@@ -17,3 +17,12 @@ echo "CONFIG_PACKAGE_libavahi-dbus-support=y" >> .config
 # 这一步会根据我们精简后的 .config 重新核对依赖
 ./scripts/feeds update -i
 ./scripts/feeds install -a
+
+# 在 diy-part2.sh 中加入，修正 24.10 的软件源格式
+sed -i 's/check_signature/ # check_signature/g' /etc/opkg.conf  # 暂时跳过签名校验（可选）
+
+# 确保软件源指向正确的 24.10 官方镜像地址（根据你的架构自动匹配）
+echo "dest root /" > /etc/opkg.conf
+echo "dest ram /tmp" >> /etc/opkg.conf
+echo "lists_dir ext /usr/lib/opkg/lists" >> /etc/opkg.conf
+echo "option overlay_root /overlay" >> /etc/opkg.conf
