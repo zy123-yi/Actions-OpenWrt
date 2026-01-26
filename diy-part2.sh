@@ -1,41 +1,28 @@
 #!/bin/bash
 
-# 1. 基础配置修改
+# 1. 基础设置
 sed -i 's/192.168.1.1/192.168.2.1/g' package/base-files/files/bin/config_generate
 sed -i 's/OpenWrt/Home-Router/g' package/base-files/files/bin/config_generate
 
-# 2. 定义报错黑名单（根据你刚才的报错信息）
-# 物理移除所有导致 "please fix Makefile" 的目录
-declare -a bug_pkgs=(
-    "feeds/helloworld/xray-plugin"
-    "feeds/helloworld/v2ray-plugin"
-    "feeds/helloworld/shadowsocks-rust"
-    "feeds/helloworld/hysteria"
-    "feeds/passwall_packages/geoview"
-    "feeds/passwall_packages/hysteria"
-    "feeds/passwall_packages/shadow-tls"
-    "feeds/passwall_packages/shadowsocks-rust"
-    "feeds/passwall_packages/naiveproxy"
-)
+# 2. 移除 helloworld 以解决冲突 (这是最稳妥的做法)
+# 如果你坚持要留着，那就手动删除冲突严重的重复包
+rm -rf feeds/helloworld/xray-core
+rm -rf feeds/helloworld/v2ray-core
+rm -rf feeds/helloworld/v2ray-plugin
+rm -rf feeds/helloworld/shadowsocks-rust
 
-for pkg in "${bad_pkgs[@]}"; do
-    [ -d "$pkg" ] && rm -rf "$pkg"
-done
+# 3. 移除导致索引错误的 Makefile 所在目录
+rm -rf feeds/helloworld/luci-app-ssr-plus
+rm -rf feeds/passwall_packages/geoview
+rm -rf feeds/passwall_packages/hysteria
 
-# 3. 强制清理所有的软链接，防止残留索引
-find package/feeds/ -type l -delete
-
-# 4. 关键：清理 tmp 缓存，这是导致 Makefile 报错持续存在的根源
+# 4. 修复 PassWall 的依赖关系
+# 如果 luci-app-passwall 报错，通常是因为它找不到对应的子包
+# 我们强制清理 tmp 并在 install 前同步
 rm -rf tmp
-rm -rf logs/*
-
-# 5. 重新安装并强制刷新索引
 ./scripts/feeds update -i
 ./scripts/feeds install -a
 
-# 6. 智能家居/内核组件增强（美的/追觅优化）
-{
-    echo "CONFIG_PACKAGE_avahi-dbus-daemon=y"
-    echo "CONFIG_PACKAGE_libavahi-dbus-support=y"
-    echo "CONFIG_PACKAGE_kmod-nft-tproxy=y"
-} >> .config
+# 5. 针对智能家居的 Avahi 补丁
+echo "CONFIG_PACKAGE_avahi-dbus-daemon=y" >> .config
+echo "CONFIG_PACKAGE_libavahi-dbus-support=y" >> .config
