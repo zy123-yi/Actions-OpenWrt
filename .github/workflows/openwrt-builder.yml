@@ -100,11 +100,7 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Install Rust and Cargo
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
+      
       - name: Load custom configuration
         run: |
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
