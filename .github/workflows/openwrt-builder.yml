@@ -11,8 +11,12 @@ on:
         options:
           - 'openwrt-24.10'
           - 'openwrt-23.05'
-          - 'openwrt-22.03'
           - 'master'
+      ssh:
+        description: '是否开启 SSH 配置模式'
+        required: false
+        default: 'false'
+        type: boolean
 
 env:
   REPO_URL: https://github.com/openwrt/openwrt.git
