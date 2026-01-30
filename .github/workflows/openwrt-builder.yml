@@ -102,6 +102,18 @@ jobs:
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
+      - name: SSH connection to Actions (SSH 模式)
+        uses: P3TERX/ssh2actions@main
+        if: (github.event.inputs.ssh == 'true' || contains(github.event.action, 'ssh'))
+        env:
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+
+      # 重要：如果使用了 SSH 模式，我们需要手动触发 defconfig
+      - name: After SSH Configuration
+        run: |
+          cd openwrt
+          [ -e .config ] && make defconfig
       - name: Download package
         run: |
           cd openwrt
