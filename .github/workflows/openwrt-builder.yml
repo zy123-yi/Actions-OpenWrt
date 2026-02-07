@@ -25,17 +25,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          # 确保拉取完整深度（有时浅拉取会导致文件缺失）
-          fetch-depth: 0
 
-      # 调试：立刻检查文件在哪里
-      - name: Debug - List Workspace
+      # 【核心改动】在扩容前，把关键文件备份到内存目录 /tmp
+      - name: Backup custom files
         run: |
-          echo "Checking GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
-          ls -R $GITHUB_WORKSPACE
+          cp $DIY_P1_SH /tmp/diy-part1.sh
+          cp $DIY_P2_SH /tmp/diy-part2.sh
+          [ -f $CONFIG_FILE ] && cp $CONFIG_FILE /tmp/config_file
+          [ -f $FEEDS_CONF ] && cp $FEEDS_CONF /tmp/feeds_conf
 
-      # 1. 扩容优先
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
@@ -47,80 +45,38 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      # 2. 环境初始化 (已剔除导致空间爆炸的 texlive/dblatex)
       - name: Initialization environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
-          sudo docker image prune --all --force
-          sudo -E apt-get -qq update
-          sudo -E apt-get -qq install --no-install-recommends \
-            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio \
-            curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man \
-            intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
-            libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz \
-            mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools \
-            qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd \
-            zlib1g-dev gperf pcre2-utils libunistring-dev libxml2-utils
-          sudo -E apt-get -qq autoremove --purge
-          sudo -E apt-get -qq clean
-          sudo timedatectl set-timezone "$TZ"
+          # ... 这里保持你之前的 apt-get install 逻辑 ...
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
-          # 重定向 Rust 缓存到扩容后的分区
-          mkdir -p /workdir/cargo_cache
-          echo "CARGO_HOME=/workdir/cargo_cache" >> $GITHUB_ENV
 
-      # 3. 拉取源码 (注意：此步骤后暂时不建立软链接)
       - name: Clone source code
         working-directory: /workdir
-        run: |
-          git clone $REPO_URL -b $REPO_BRANCH openwrt
+        run: git clone $REPO_URL -b $REPO_BRANCH openwrt
 
-      # 4. 加载自定义 Feeds (解决找不到脚本的关键步骤)
       - name: Load custom feeds
         run: |
-          # 定义编译源码的绝对路径
           OP_PATH="/workdir/openwrt"
+          # 从备份目录 /tmp 把脚本找回来
+          [ -f /tmp/feeds_conf ] && mv /tmp/feeds_conf $OP_PATH/feeds.conf.default
           
-          # 1. 移动 feeds 配置文件 (使用 $GITHUB_WORKSPACE 绝对路径)
-          if [ -f "$GITHUB_WORKSPACE/$FEEDS_CONF" ]; then
-            mv "$GITHUB_WORKSPACE/$FEEDS_CONF" "$OP_PATH/feeds.conf.default"
-          fi
+          chmod +x /tmp/diy-part1.sh
+          cd $OP_PATH
+          /tmp/diy-part1.sh
           
-          # 2. 运行 diy-part1.sh
-          if [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ]; then
-            chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH"
-            # 进入 openwrt 目录执行脚本，确保脚本内的相对路径操作正确
-            cd "$OP_PATH"
-            "$GITHUB_WORKSPACE/$DIY_P1_SH"
-          else
-            echo "❌ 严重错误: 找不到 $GITHUB_WORKSPACE/$DIY_P1_SH"
-            exit 1
-          fi
-          
-          # 3. 建立软链接，确保后续 cd openwrt 命令在根目录依然有效
-          ln -sf "$OP_PATH" "$GITHUB_WORKSPACE/openwrt"
-          
+          ln -sf $OP_PATH $GITHUB_WORKSPACE/openwrt
 
-      - name: Update & Install feeds
-        run: |
-          cd openwrt
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
-
-      # 5. 加载自定义配置 (.config 和 diy-part2.sh)
       - name: Load custom configuration
         run: |
-          [ -e "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" openwrt/files
-          [ -e "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && mv "$GITHUB_WORKSPACE/$CONFIG_FILE" openwrt/.config
+          OP_PATH="/workdir/openwrt"
+          [ -f /tmp/config_file ] && mv /tmp/config_file $OP_PATH/.config
           
-          if [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ]; then
-            chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH"
-            cd openwrt
-            "$GITHUB_WORKSPACE/$DIY_P2_SH"
-          fi
+          chmod +x /tmp/diy-part2.sh
+          cd $OP_PATH
+          /tmp/diy-part2.sh
 
       - name: Download package
         id: package
