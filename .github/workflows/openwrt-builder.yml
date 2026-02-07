@@ -40,10 +40,14 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils
-          # 创建工作目录并赋权，防止权限报错
-          sudo mkdir -p /workdir
-          sudo chown $USER:$GROUPS /workdir
+          # 补充 libzstd-dev (加速内核) 和 libelf-dev (6.12内核必须)
+          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils libzstd-dev libelf-dev
+          
+          # 性能补丁：增加 Swap 空间，防止多线程编译内存崩溃
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
 
       - name: Space Great Migration
         run: |
@@ -107,40 +111,41 @@ jobs:
           # 刷新配置并同步依赖
           make defconfig
 
-      # 7. 专项分段编译 (2026 增强防御版)
       - name: Multi-Stage Compilation
         run: |
           cd /workdir/openwrt
           
-          # 环境降噪
+          # 1. 注入 22.04 特有的编译器容错（解决 GCC 严格校验问题）
+          export CFLAGS="-O2 -Wno-error=all -Wno-unused-result"
+          export CXXFLAGS="-O2 -Wno-error=all -Wno-unused-result"
           export FORCE_UNSAFE_CONFIGURE=1
           
-          # A. 智能下载
+          # 2. 预检下载（加入重试逻辑）
           echo "::group::Step 0 - Smart Download"
           make download -j$(nproc) || make download -j1 V=s
           echo "::endgroup::"
 
-          # B. 工具链编译
+          # 3. 工具链编译
           echo "::group::Step 1 - Tools & Toolchain"
           make tools/install -j$(nproc) || make tools/install -j1 V=s
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          # C. 重要：先编译内核头部与配置 (解决 cryptodev 报错的根源)
-          echo "::group::Step 2 - Kernel Preparation"
+          # 4. 内核与目标架构准备 (防止 cryptodev 类错误的核心)
+          echo "::group::Step 2 - Target & Linux Preparation"
           make target/linux/compile -j$(nproc) || make target/linux/compile -j1 V=s
           echo "::endgroup::"
 
-          # D. 插件编译 (加入容错)
+          # 5. 插件编译 (开启多线程极限压榨，并忽略非核心错误)
           echo "::group::Step 3 - Package Compilation"
-          # 使用 IGNORE_ERRORS=1 防止非核心包失败导致 Action 中止
-          make package/compile -j$(nproc) IGNORE_ERRORS=1 || make package/compile -j1 V=s IGNORE_ERRORS=1
+          # 使用 IGNORE_ERRORS=m (或 1) 允许部分不兼容 6.12 的包失败，不影响最终固件
+          make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
           echo "::endgroup::"
 
-          # E. 最终打包
-          echo "::group::Step 4 - Final Image Build"
-          # 清理临时文件释放空间，确保打包有足够余量
-          rm -rf build_dir/hostpkg build_dir/host build_dir/target-x86_64_musl/cryptodev-linux*
+          # 6. 镜像生成
+          echo "::group::Step 4 - Image Build"
+          # 编译完成后清理 build_dir 下的巨大临时文件，防止打包时磁盘溢出
+          rm -rf build_dir/target-x86_64_musl/linux-x86_64/cryptodev-linux*
           make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
 
