@@ -37,6 +37,24 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
+      - name: Cleanup and Re-partition
+        run: |
+          # 1. 删除所有不必要的预装大型软件
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost /usr/lib/jvm
+          
+          # 2. 彻底清理 Docker
+          sudo docker image prune --all --force
+          
+          # 3. 关键：将临时目录指向更大的磁盘空间
+          # GitHub Actions 的工作目录是在 /home/runner/work，这里空间相对较大
+          sudo mkdir -p /home/runner/work/tmp
+          sudo chmod 1777 /home/runner/work/tmp
+          echo "TMPDIR=/home/runner/work/tmp" >> $GITHUB_ENV
+          
+          # 4. 检查磁盘
+          df -h
+          
+
       # 2. 物理腾空间：在 apt 运行前，手动清理掉由于重挂载可能残留的大文件
       - name: Physical Cleanup
         run: |
@@ -49,6 +67,9 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          # 在最前面增加空间检查逻辑
+          sudo mkdir -p /mnt/workdir
+          sudo chown $USER:$GROUPS /mnt/workdir
           sudo -E apt-get -qq update
           # 安装核心依赖
           sudo -E apt-get -qq install --no-install-recommends \
