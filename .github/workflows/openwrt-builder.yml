@@ -38,18 +38,17 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      # 2. 精简环境初始化：严防 texlive 等垃圾包
+      # 2. 精简环境初始化：严防 texlive 等垃圾包撑爆磁盘
       - name: Initialization environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          # 清理预装杂物
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           sudo docker image prune --all --force
           
           sudo -E apt-get -qq update
           
-          # 核心优化：使用 --no-install-recommends 彻底杜绝文档类大包
+          # 核心优化：使用 --no-install-recommends 彻底杜绝文档类大包（texlive/dblatex）
           sudo -E apt-get -qq install --no-install-recommends \
             ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio \
             curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man \
@@ -63,17 +62,14 @@ jobs:
           sudo -E apt-get -qq clean
           sudo timedatectl set-timezone "$TZ"
           
-          # 准备工作目录
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
           
-          # 将 Rust 和 Ccache 缓存移至大空间目录，防止撑爆 /tmp 或根分区
+          # 为 Shadowsocks-Rust 准备大容量缓存空间
           mkdir -p /workdir/cargo_cache
-          mkdir -p /workdir/ccache
           echo "CARGO_HOME=/workdir/cargo_cache" >> $GITHUB_ENV
-          echo "CCACHE_DIR=/workdir/ccache" >> $GITHUB_ENV
 
-      # 3. 源码处理
+      # 3. 源码拉取
       - name: Clone source code
         working-directory: /workdir
         run: |
@@ -92,21 +88,19 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf https://github.com/
 
-      # 4. DIY 脚本应用（路径锁定修复）
+      # 4. DIY 脚本应用（已修正路径引用与小写变量）
       - name: Load custom feeds
         run: |
-          # 1. 自动寻找 feeds.conf.default 并移动
-          FEEDS_PATH=$(find $GITHUB_WORKSPACE -name "$FEEDS_CONF" | head -n 1)
-          [ -n "$FEEDS_PATH" ] && mv "$FEEDS_PATH" openwrt/feeds.conf.default
+          # 寻找并移动 feeds 配置文件
+          [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF openwrt/feeds.conf.default
           
-          # 2. 自动寻找 diy-part1.sh 并赋予权限
-          DIY_P1_PATH=$(find $GITHUB_WORKSPACE -name "$DIY_P1_SH" | head -n 1)
-          if [ -n "$DIY_P1_PATH" ]; then
-            chmod +x "$DIY_P1_PATH"
+          # 确保脚本存在并执行（小写文件名匹配）
+          if [ -f $GITHUB_WORKSPACE/$DIY_P1_SH ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
             cd openwrt
-            "$DIY_P1_PATH"
+            $GITHUB_WORKSPACE/$DIY_P1_SH
           else
-            echo "错误: 找不到 $DIY_P1_SH，请检查文件名或路径！"
+            echo "错误: 找不到 $DIY_P1_SH，请核实仓库文件名是否为全小写！"
             ls -R $GITHUB_WORKSPACE
             exit 1
           fi
@@ -119,25 +113,16 @@ jobs:
 
       - name: Load custom configuration
         run: |
-          # 1. 自动寻找 .config
-          CONFIG_PATH=$(find $GITHUB_WORKSPACE -name "$CONFIG_FILE" | head -n 1)
-          [ -n "$CONFIG_PATH" ] && mv "$CONFIG_PATH" openwrt/.config
+          [ -e $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files openwrt/files
+          [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE openwrt/.config
           
-          # 2. 自动寻找 files 文件夹
-          FILES_PATH=$(find $GITHUB_WORKSPACE -name "files" -type d | head -n 1)
-          [ -d "$FILES_PATH" ] && mv "$FILES_PATH" openwrt/files
-          
-          # 3. 自动寻找 diy-part2.sh
-          DIY_P2_PATH=$(find $GITHUB_WORKSPACE -name "$DIY_P2_SH" | head -n 1)
-          if [ -n "$DIY_P2_PATH" ]; then
-            chmod +x "$DIY_P2_PATH"
+          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
             cd openwrt
-            "$DIY_P2_PATH"
-          else
-            echo "警告: 找不到 $DIY_P2_SH，跳过执行。"
+            $GITHUB_WORKSPACE/$DIY_P2_SH
           fi
 
-      # 5. 下载与编译
+      # 5. 下载包与编译（保持单线程以确保 Shadowsocks-Rust 编译稳定性）
       - name: Download package
         id: package
         run: |
@@ -152,7 +137,7 @@ jobs:
         run: |
           cd openwrt
           echo -e "$(nproc) thread compile"
-          # 针对 Shadowsocks-Rust 构建，先用单线程确保稳定性
+          # 使用单线程 V=s 方便排错，且在空间受限时更稳
           make -j1 V=s
           if [ -n "$(find bin/targets/ -type f -name "*.img*" -o -name "*.vmdk*")" ]; then
             echo "status=success" >> $GITHUB_OUTPUT
@@ -164,7 +149,7 @@ jobs:
           [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-      # 6. 产物处理与上传
+      # 6. 产物整理与上传
       - name: Check space usage
         if: (!cancelled())
         run: df -hT
@@ -191,7 +176,7 @@ jobs:
         run: |
           echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
-          echo "🔥 LEDE Firmware for x86_64 (19号机安全加固版)" >> release.txt
+          echo "🔥 LEDE Firmware for x86_64 (19号机专用)" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Upload firmware to release
