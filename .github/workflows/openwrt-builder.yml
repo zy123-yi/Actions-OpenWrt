@@ -45,6 +45,21 @@ jobs:
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
 
+      - name: Space Great Migration
+        run: |
+          # 1. 在空间充裕的 /mnt 创建工作目录
+          sudo mkdir -p /mnt/workdir/openwrt
+          sudo chown $USER:$GROUPS /mnt/workdir/openwrt
+          
+          # 2. 将 GitHub 默认的工作路径 /workdir/openwrt 软链接到 /mnt
+          # 假设你之前的路径是 /workdir/openwrt
+          rm -rf /workdir/openwrt
+          ln -s /mnt/workdir/openwrt /workdir/openwrt
+          
+          # 3. 检查软链接是否生效
+          ls -ld /workdir/openwrt
+          df -h
+          
       # 4. 源码拉取
       - name: Clone Source Code
         working-directory: /workdir
