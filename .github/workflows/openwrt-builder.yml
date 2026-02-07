@@ -43,22 +43,23 @@ jobs:
           cp -v $DIY_P2_SH /tmp/diy-part2.sh || echo "None"
           [ -f $CONFIG_FILE ] && cp -v $CONFIG_FILE /tmp/config_base || echo "None"
 
-      # 3. 2026 最新依赖库环境初始化
+      # 3. 强化版环境初始化
       - name: Initialization Environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo -E apt-get -qq update
-          # 针对 Ubuntu 24.04 优化的依赖包列表
+          # 补充了 libgmp-dev, libelf-dev 等关键库
           sudo -E apt-get -qq install --no-install-recommends \
-            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio \
+            build-essential libgmp-dev libmpfr-dev libmpc-dev libelf-dev \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio \
             curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man \
-            intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
-            libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz \
-            mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools \
-            qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd \
-            zlib1g-dev pcre2-utils libunistring-dev libxml2-utils
+            intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev \
+            libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full \
+            patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools \
+            subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils \
+            libunistring-dev libxml2-utils
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
           sudo timedatectl set-timezone "$TZ"
@@ -98,31 +99,25 @@ jobs:
           fi
           make defconfig
 
-      # 7. 分段分层编译 (核心改进)
+      # 7. 专项分段编译 (加入 Tools 专项清理)
       - name: Multi-Stage Compilation
         run: |
           cd /workdir/openwrt
-          # 第一阶段：编译工具 (Tools)
+          
+          # 强制刷新配置并进入工具编译
+          make defconfig
+          
           echo "::group::Step 1 - Tools Build"
-          make tools/install -j$(nproc) || make tools/install -j1 V=s
+          # 如果 tools 编译失败，先清理再单线程运行，捕捉真实错误日志
+          make tools/install -j$(nproc) || {
+            echo "Tools 多线程编译失败，正在尝试单线程定位错误..."
+            make tools/install -j1 V=s
+          }
           echo "::endgroup::"
 
-          # 第二阶段：编译编译器 (Toolchain)
+          # 只有 Step 1 成功才继续下一步
           echo "::group::Step 2 - Toolchain Build"
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
-          echo "::endgroup::"
-
-          # 第三阶段：下载包与预编译
-          make download -j16
-          
-          # 第四阶段：分步编译插件包
-          echo "::group::Step 3 - Package Build"
-          make package/compile -j$(nproc) IGNORE_ERRORS=1 || make package/compile -j1 V=s IGNORE_ERRORS=1
-          echo "::endgroup::"
-
-          # 第五阶段：生成镜像
-          echo "::group::Step 4 - Image Build"
-          make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
 
       # 8. 产物整理与发布
