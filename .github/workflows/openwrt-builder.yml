@@ -25,6 +25,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 确保拉取完整深度（有时浅拉取会导致文件缺失）
+          fetch-depth: 0
+
+      # 调试：立刻检查文件在哪里
+      - name: Debug - List Workspace
+        run: |
+          echo "Checking GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+          ls -R $GITHUB_WORKSPACE
 
       # 1. 扩容优先
       - name: Maximize build space
