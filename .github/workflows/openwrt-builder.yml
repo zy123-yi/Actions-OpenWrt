@@ -25,32 +25,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 1. 扩容优先（Ubuntu 24.04 的磁盘结构与旧版不同，必须先扩容）
+      # 1. 极端扩容：必须放在最前面，且增加删除项
       - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 1024
+          root-reserve-mb: 2048
           swap-size-mb: 1024
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
+          remove-docker-images: 'true'
 
-      # 2. 备份 DIY 脚本到 /tmp 内存区，防止磁盘重挂载丢失文件
-      - name: Backup Scripts
+      # 2. 物理腾空间：在 apt 运行前，手动清理掉由于重挂载可能残留的大文件
+      - name: Physical Cleanup
         run: |
-          cp -v $DIY_P1_SH /tmp/diy-part1.sh || echo "None"
-          cp -v $DIY_P2_SH /tmp/diy-part2.sh || echo "None"
-          [ -f $CONFIG_FILE ] && cp -v $CONFIG_FILE /tmp/config_base || echo "None"
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost
+          # 检查磁盘空间，确保根目录有足够的余量
+          df -h
 
-      # 3. 强化版环境初始化
+      # 3. 环境初始化（现在有空间运行 apt-get 了）
       - name: Initialization Environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo -E apt-get -qq update
-          # 补充了 libgmp-dev, libelf-dev 等关键库
+          # 安装核心依赖
           sudo -E apt-get -qq install --no-install-recommends \
             build-essential libgmp-dev libmpfr-dev libmpc-dev libelf-dev \
             ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio \
@@ -63,6 +63,7 @@ jobs:
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
           sudo timedatectl set-timezone "$TZ"
+          # 准备编译工作区
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
 
