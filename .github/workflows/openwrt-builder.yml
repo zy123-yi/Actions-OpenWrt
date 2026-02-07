@@ -92,22 +92,37 @@ jobs:
 
       - name: Load custom configuration
         run: |
+          # 1. 移动自定义文件（如果存在）
           [ -e "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" openwrt/files
-          [ -e "$GITHUB_WORKSPACE/$CONFIG_FILE" ] && mv "$GITHUB_WORKSPACE/$CONFIG_FILE" openwrt/.config
           
-          # 核心改动：强制去掉 Rust 相关组件
+          # 2. 处理 .config：如果不存在，则先生成默认配置
+          if [ -e "$GITHUB_WORKSPACE/$CONFIG_FILE" ]; then
+            mv "$GITHUB_WORKSPACE/$CONFIG_FILE" openwrt/.config
+            echo "已加载仓库中的自定义 .config"
+          else
+            cd openwrt && make defconfig && cd ..
+            echo "仓库中未找到 .config，已生成默认配置"
+          fi
+          
+          # 3. 强制去掉 Rust 组件 (进入目录并确保文件存在)
           cd openwrt
-          sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
-          sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
-          # 如果你使用的是 Passwall，也建议执行以下命令
-          sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
+          if [ -f .config ]; then
+            # 即使文件中没有这些行，sed 也不会报错
+            sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
+            sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
+            sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
+            # 补充：将这些项彻底设置为 n 以防万一
+            echo "CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n" >> .config
+            echo "CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n" >> .config
+          fi
           
+          # 4. 执行 DIY2 脚本
           if [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ]; then
             chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH"
             "$GITHUB_WORKSPACE/$DIY_P2_SH"
           fi
           
-          # 重新应用配置以确保依赖关系正确
+          # 最后刷一遍配置，自动补全依赖
           make defconfig
 
       # 后续编译步骤保持不变...
