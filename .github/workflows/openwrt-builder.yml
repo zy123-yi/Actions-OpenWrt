@@ -66,6 +66,7 @@ jobs:
           # 准备编译工作区
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
+          sudo ln -sf /usr/bin/python3 /usr/bin/python
 
       # 4. 源码拉取
       - name: Clone Source Code
@@ -117,8 +118,17 @@ jobs:
           echo "::endgroup::"
 
           # 只有 Step 1 成功才继续下一步
-          echo "::group::Step 2 - Toolchain Build"
-          make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
+          echo "::group::Step 2.1 - Build Toolchain Dependencies"
+          # 先单独编译基础库，确保不会因为并行编译导致头文件丢失
+          make toolchain/binutils/compile -j$(nproc) || make toolchain/binutils/compile -j1 V=s
+          echo "::endgroup::"
+
+          echo "::group::Step 2.2 - Build Initial GCC"
+          # 这是你报错的地方，我们强制用单线程运行以捕捉真实错误
+          make toolchain/gcc/initial/compile -j$(nproc) || {
+              echo "❌ GCC Initial 编译失败，切换单线程输出详细日志..."
+              make toolchain/gcc/initial/compile -j1 V=s
+          }
           echo "::endgroup::"
 
       # 8. 产物整理与发布
