@@ -104,31 +104,33 @@ jobs:
           fi
           make defconfig
 
-      # 7. 专项分段编译 (加入 Tools 专项清理)
+      # 7. 专项分段编译 (完整版：工具链 -> 插件 -> 镜像)
       - name: Multi-Stage Compilation
         run: |
           cd /workdir/openwrt
-          
-          # 注入环境变量，降低编译器严苛度
           export CFLAGS="-O2 -Wno-error=all"
           export CXXFLAGS="-O2 -Wno-error=all"
-
           make defconfig
           
           echo "::group::Step 1 - Tools Build"
           make tools/install -j$(nproc) || make tools/install -j1 V=s
           echo "::endgroup::"
 
-          echo "::group::Step 2.1 - Build Toolchain Dependencies"
-          make toolchain/binutils/compile -j$(nproc) || make toolchain/binutils/compile -j1 V=s
+          echo "::group::Step 2 - Toolchain Build"
+          # 包含 binutils, gcc-initial, kernel-headers, gcc-final 等
+          make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          echo "::group::Step 2.2 - Build Initial GCC"
-          # 关键：手动补齐编译初级编译器所需的临时参数
-          make toolchain/gcc/initial/compile -j$(nproc) CFLAGS_FOR_BUILD="-Wno-error=format-security" || {
-              echo "❌ GCC Initial 再次失败，单线程尝试中..."
-              make toolchain/gcc/initial/compile -j1 V=s
-          }
+          echo "::group::Step 3 - Package Build"
+          # 下载源码包
+          make download -j16
+          # 编译所有插件。IGNORE_ERRORS=1 防止个别非核心插件报错导致流程中断
+          make package/compile -j$(nproc) IGNORE_ERRORS=1 || make package/compile -j1 V=s IGNORE_ERRORS=1
+          echo "::endgroup::"
+
+          echo "::group::Step 4 - Final Image Build"
+          # 这步才是真正的“打包固件”，生成最终的镜像文件
+          make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
 
       # 8. 产物整理与发布
