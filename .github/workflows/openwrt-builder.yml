@@ -69,13 +69,16 @@ jobs:
       - name: Load Custom Configuration
         run: |
           cd /workdir/openwrt
-          [ -f /tmp/config_base ] && mv /tmp/config_base .config || make defconfig
-          # 彻底移除 Shadowsocks-Rust 及其导致的冲突
+          # 修正：从工作区移动配置文件到编译目录
+          [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
+          
+          # 你的 Shadowsocks-Rust 固化逻辑
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
-          if [ -f /tmp/diy-part2.sh ]; then
-            chmod +x /tmp/diy-part2.sh
-            /tmp/diy-part2.sh
+          
+          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+            $GITHUB_WORKSPACE/$DIY_P2_SH
           fi
           make defconfig
 
