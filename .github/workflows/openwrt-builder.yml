@@ -26,6 +26,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 1. 优先扩容：确保整个环境都在大空间下运行
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
@@ -37,33 +38,42 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
+      # 2. 精简环境初始化：严防 texlive 等垃圾包
       - name: Initialization environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          # 1. 预先清理系统中没用的大家伙，腾出初始空间给 apt-get
+          # 清理预装杂物
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
           
-          # 2. 更新源
           sudo -E apt-get -qq update
           
-          # 3. 安装核心编译工具（彻底剔除 dblatex, texlive, docbook 等垃圾）
-          # 注意：这里我帮你去掉了所有会导致磁盘爆炸的包
-          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev gperf pcre2-utils libunistring-dev libxml2-utils
+          # 核心优化：使用 --no-install-recommends 彻底杜绝文档类大包
+          sudo -E apt-get -qq install --no-install-recommends \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio \
+            curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man \
+            intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz \
+            mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools \
+            qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd \
+            zlib1g-dev gperf pcre2-utils libunistring-dev libxml2-utils
           
-          # 4. 清理 apt 缓存
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
-          
-          # 5. 其他系统设置
           sudo timedatectl set-timezone "$TZ"
+          
+          # 准备工作目录
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
           
-          # 环境变量设置
-          mkdir -p /home/runner/work/cargo_cache
-          echo "CARGO_HOME=/home/runner/work/cargo_cache" >> $GITHUB_ENV
+          # 将 Rust 和 Ccache 缓存移至大空间目录，防止撑爆 /tmp 或根分区
+          mkdir -p /workdir/cargo_cache
+          mkdir -p /workdir/ccache
+          echo "CARGO_HOME=/workdir/cargo_cache" >> $GITHUB_ENV
+          echo "CCACHE_DIR=/workdir/ccache" >> $GITHUB_ENV
 
+      # 3. 源码处理
       - name: Clone source code
         working-directory: /workdir
         run: |
@@ -82,9 +92,9 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf https://github.com/
 
+      # 4. DIY 脚本应用（路径锁定修复）
       - name: Load custom feeds
         run: |
-          # 修正路径引用，确保在 openwrt 目录外寻找 DIY 脚本和配置文件
           [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF openwrt/feeds.conf.default
           chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
           cd openwrt
@@ -98,13 +108,13 @@ jobs:
 
       - name: Load custom configuration
         run: |
-          # 修正路径引用
           [ -e $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files openwrt/files
           [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE openwrt/.config
           chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
+      # 5. 下载与编译
       - name: Download package
         id: package
         run: |
@@ -119,7 +129,7 @@ jobs:
         run: |
           cd openwrt
           echo -e "$(nproc) thread compile"
-          # 建议初次尝试单线程排错，若稳定后可换回多线程提高效率
+          # 针对 Shadowsocks-Rust 构建，先用单线程确保稳定性
           make -j1 V=s
           if [ -n "$(find bin/targets/ -type f -name "*.img*" -o -name "*.vmdk*")" ]; then
             echo "status=success" >> $GITHUB_OUTPUT
@@ -131,6 +141,7 @@ jobs:
           [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
+      # 6. 产物处理与上传
       - name: Check space usage
         if: (!cancelled())
         run: df -hT
@@ -157,7 +168,7 @@ jobs:
         run: |
           echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
-          echo "🔥 LEDE Firmware for x86_64" >> release.txt
+          echo "🔥 LEDE Firmware for x86_64 (19号机安全加固版)" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Upload firmware to release
