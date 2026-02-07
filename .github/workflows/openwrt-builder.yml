@@ -66,7 +66,10 @@ jobs:
           # 准备编译工作区
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
+          # ... 安装命令 ...
           sudo ln -sf /usr/bin/python3 /usr/bin/python
+          # 关键：修复 Ubuntu 24.04 可能缺失的某些底层兼容头文件
+          sudo apt-get install -y lib32gcc-s1 lib32stdc++6
 
       # 4. 源码拉取
       - name: Clone Source Code
@@ -106,27 +109,24 @@ jobs:
         run: |
           cd /workdir/openwrt
           
-          # 强制刷新配置并进入工具编译
+          # 注入环境变量，降低编译器严苛度
+          export CFLAGS="-O2 -Wno-error=all"
+          export CXXFLAGS="-O2 -Wno-error=all"
+
           make defconfig
           
           echo "::group::Step 1 - Tools Build"
-          # 如果 tools 编译失败，先清理再单线程运行，捕捉真实错误日志
-          make tools/install -j$(nproc) || {
-            echo "Tools 多线程编译失败，正在尝试单线程定位错误..."
-            make tools/install -j1 V=s
-          }
+          make tools/install -j$(nproc) || make tools/install -j1 V=s
           echo "::endgroup::"
 
-          # 只有 Step 1 成功才继续下一步
           echo "::group::Step 2.1 - Build Toolchain Dependencies"
-          # 先单独编译基础库，确保不会因为并行编译导致头文件丢失
           make toolchain/binutils/compile -j$(nproc) || make toolchain/binutils/compile -j1 V=s
           echo "::endgroup::"
 
           echo "::group::Step 2.2 - Build Initial GCC"
-          # 这是你报错的地方，我们强制用单线程运行以捕捉真实错误
-          make toolchain/gcc/initial/compile -j$(nproc) || {
-              echo "❌ GCC Initial 编译失败，切换单线程输出详细日志..."
+          # 关键：手动补齐编译初级编译器所需的临时参数
+          make toolchain/gcc/initial/compile -j$(nproc) CFLAGS_FOR_BUILD="-Wno-error=format-security" || {
+              echo "❌ GCC Initial 再次失败，单线程尝试中..."
               make toolchain/gcc/initial/compile -j1 V=s
           }
           echo "::endgroup::"
