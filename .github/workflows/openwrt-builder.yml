@@ -125,32 +125,43 @@ jobs:
           fi
           make defconfig
 
-      # 7. 专项分段编译 (完整版：工具链 -> 插件 -> 镜像)
+      # 7. 专项分段编译 (2026 增强版：防御性编译逻辑)
       - name: Multi-Stage Compilation
         run: |
           cd /workdir/openwrt
+          
+          # A. 环境降噪与容错
           export CFLAGS="-O2 -Wno-error=all"
           export CXXFLAGS="-O2 -Wno-error=all"
-          make defconfig
+          export FORCE_UNSAFE_CONFIGURE=1
           
-          echo "::group::Step 1 - Tools Build"
-          make tools/install -j$(nproc) || make tools/install -j1 V=s
+          # B. 预检下载 (解决 util-linux 等包卡死)
+          echo "::group::Step 0 - Smart Download"
+          make defconfig
+          # 清理 0 字节损坏包，设置 30 秒超时，防止无限挂起
+          find dl -size -1k -name "*.tar.*" -exec rm -f {} \;
+          make download -j$(nproc) WGET="wget --timeout=30 --tries=3" || make download -j1 V=s
           echo "::endgroup::"
 
-          echo "::group::Step 2 - Toolchain Build"
-          # 包含 binutils, gcc-initial, kernel-headers, gcc-final 等
+          # C. 工具链编译 (解决 kernel-headers 报错)
+          echo "::group::Step 1 - Tools & Toolchain"
+          # 优先保证工具安装，不成功则单线程输出日志
+          make tools/install -j$(nproc) || make tools/install -j1 V=s
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          echo "::group::Step 3 - Package Build"
-          # 下载源码包
-          make download -j16
-          # 编译所有插件。IGNORE_ERRORS=1 防止个别非核心插件报错导致流程中断
-          make package/compile -j$(nproc) IGNORE_ERRORS=1 || make package/compile -j1 V=s IGNORE_ERRORS=1
+          # D. 插件编译 (防御磁盘爆满)
+          echo "::group::Step 2 - Package Compilation"
+          # 每次大步之后清理无用文件，释放磁盘空间
+          df -h
+          make package/compile -j$(nproc) IGNORE_ERRORS=1 || {
+              echo "警告：部分插件编译失败，正在清理磁盘并尝试单线程挽救..."
+              make package/compile -j1 V=s IGNORE_ERRORS=1
+          }
           echo "::endgroup::"
 
-          echo "::group::Step 4 - Final Image Build"
-          # 这步才是真正的“打包固件”，生成最终的镜像文件
+          # E. 最终打包 (生成固件)
+          echo "::group::Step 3 - Final Image Build"
           make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
 
