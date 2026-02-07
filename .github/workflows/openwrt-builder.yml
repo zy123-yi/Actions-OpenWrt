@@ -36,7 +36,7 @@ jobs:
           remove-haskell: 'true'
           remove-codeql: 'true'
           remove-docker-images: 'true'
-      
+
       - name: Initialization environment
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -50,18 +50,9 @@ jobs:
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
-
-    
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false
+          # 为 Shadowsocks-Rust 准备更大空间的缓存目录
+          mkdir -p /home/runner/work/cargo_cache
+          echo "CARGO_HOME=/home/runner/work/cargo_cache" >> $GITHUB_ENV
 
       - name: Clone source code
         working-directory: /workdir
@@ -83,9 +74,11 @@ jobs:
 
       - name: Load custom feeds
         run: |
-          [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
-          chmod +x $GITHUB_WORKSPACE/diy-part1.sh
-          $GITHUB_WORKSPACE/diy-part1.sh
+          # 修正路径引用，确保在 openwrt 目录外寻找 DIY 脚本和配置文件
+          [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF openwrt/feeds.conf.default
+          chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P1_SH
 
       - name: Update & Install feeds
         run: |
@@ -95,10 +88,12 @@ jobs:
 
       - name: Load custom configuration
         run: |
-          [ -e files ] && mv files openwrt/files
-          [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-          chmod +x $GITHUB_WORKSPACE/diy-part2.sh
-          $GITHUB_WORKSPACE/diy-part2.sh
+          # 修正路径引用
+          [ -e $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files openwrt/files
+          [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE openwrt/.config
+          chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P2_SH
 
       - name: Download package
         id: package
@@ -114,7 +109,7 @@ jobs:
         run: |
           cd openwrt
           echo -e "$(nproc) thread compile"
-          #make -j$(nproc) || make -j1 V=s
+          # 建议初次尝试单线程排错，若稳定后可换回多线程提高效率
           make -j1 V=s
           if [ -n "$(find bin/targets/ -type f -name "*.img*" -o -name "*.vmdk*")" ]; then
             echo "status=success" >> $GITHUB_OUTPUT
