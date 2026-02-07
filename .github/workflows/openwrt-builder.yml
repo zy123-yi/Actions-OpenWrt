@@ -26,13 +26,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 【核心改动】在扩容前，把关键文件备份到内存目录 /tmp
+      # 1. 强力备份：不再依赖变量，直接在当前目录找文件
       - name: Backup custom files
         run: |
-          cp $DIY_P1_SH /tmp/diy-part1.sh
-          cp $DIY_P2_SH /tmp/diy-part2.sh
-          [ -f $CONFIG_FILE ] && cp $CONFIG_FILE /tmp/config_file
-          [ -f $FEEDS_CONF ] && cp $FEEDS_CONF /tmp/feeds_conf
+          # 打印当前路径，方便万一报错时排查
+          echo "Current Path: $PWD"
+          # 强制拷贝，如果文件存在就拷走，不存在也不要报错 (使用 || true)
+          cp -v diy-part1.sh /tmp/diy-part1.sh || echo "diy-part1.sh not found"
+          cp -v diy-part2.sh /tmp/diy-part2.sh || echo "diy-part2.sh not found"
+          cp -v .config /tmp/config_file || echo ".config not found"
+          cp -v feeds.conf.default /tmp/feeds_conf || echo "feeds.conf.default not found"
+          # 列出 /tmp 确认备份成功
+          ls -l /tmp/diy-part*
 
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
@@ -49,7 +54,13 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          # ... 这里保持你之前的 apt-get install 逻辑 ...
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo -E apt-get -qq update
+          # 注意：这里务必使用之前讨论过的精简版安装命令，防止磁盘撑爆
+          sudo -E apt-get -qq install --no-install-recommends ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev gperf pcre2-utils libunistring-dev libxml2-utils
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+          sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
 
@@ -60,23 +71,37 @@ jobs:
       - name: Load custom feeds
         run: |
           OP_PATH="/workdir/openwrt"
-          # 从备份目录 /tmp 把脚本找回来
+          # 从备份目录还原
           [ -f /tmp/feeds_conf ] && mv /tmp/feeds_conf $OP_PATH/feeds.conf.default
           
-          chmod +x /tmp/diy-part1.sh
-          cd $OP_PATH
-          /tmp/diy-part1.sh
+          # 执行备份的脚本
+          if [ -f /tmp/diy-part1.sh ]; then
+            chmod +x /tmp/diy-part1.sh
+            cd $OP_PATH
+            /tmp/diy-part1.sh
+          fi
           
+          # 建立软链接，确保后面步骤 cd openwrt 有效
           ln -sf $OP_PATH $GITHUB_WORKSPACE/openwrt
+
+      - name: Update & Install feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
 
       - name: Load custom configuration
         run: |
           OP_PATH="/workdir/openwrt"
           [ -f /tmp/config_file ] && mv /tmp/config_file $OP_PATH/.config
           
-          chmod +x /tmp/diy-part2.sh
-          cd $OP_PATH
-          /tmp/diy-part2.sh
+          if [ -f /tmp/diy-part2.sh ]; then
+            chmod +x /tmp/diy-part2.sh
+            cd $OP_PATH
+            /tmp/diy-part2.sh
+          fi
+
+      # 后续编译步骤保持不变...
 
       - name: Download package
         id: package
