@@ -25,68 +25,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 1. 极端扩容：必须放在最前面，且增加删除项
-      - name: Free Disk Space (Ubuntu 22.04)
+      - name: Free Disk Space
         run: |
+          # 增加对 Azure 预装大文件的清理
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost /usr/lib/jvm
+          # 彻底清理 Docker 冗余
           sudo docker image prune --all --force
-          df -h
-          
-      - name: Maximize Build Space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 2048
-          swap-size-mb: 1
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-
-      - name: Cleanup and Re-partition
-        run: |
-          # 1. 删除所有不必要的预装大型软件
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost /usr/lib/jvm
-          
-          # 2. 彻底清理 Docker
-          sudo docker image prune --all --force
-          
-          # 3. 关键：将临时目录指向更大的磁盘空间
-          # GitHub Actions 的工作目录是在 /home/runner/work，这里空间相对较大
-          sudo mkdir -p /home/runner/work/tmp
-          sudo chmod 1777 /home/runner/work/tmp
-          echo "TMPDIR=/home/runner/work/tmp" >> $GITHUB_ENV
-          
-          # 4. 检查磁盘
-          df -h
-          
-
-      # 2. 物理腾空间：在 apt 运行前，手动清理掉由于重挂载可能残留的大文件
-      - name: Physical Cleanup
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost
-          # 检查磁盘空间，确保根目录有足够的余量
+          # 清理 apt 缓存
+          sudo apt-get clean
           df -h
 
-      # 3. 环境初始化（现在有空间运行 apt-get 了）
       - name: Initialization Environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          # 在最前面增加空间检查逻辑
-          sudo mkdir -p /mnt/workdir
-          sudo chown $USER:$GROUPS /mnt/workdir
-          sudo -E apt-get -qq update
-          # 安装核心依赖
+          sudo apt-get update
           sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils
-          sudo -E apt-get -qq autoremove --purge
-          sudo -E apt-get -qq clean
-          sudo timedatectl set-timezone "$TZ"
-          # 准备编译工作区
+          # 创建工作目录并赋权，防止权限报错
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
-          # ... 安装命令 ...
-          sudo ln -sf /usr/bin/python3 /usr/bin/python
-          # 关键：修复 Ubuntu 24.04 可能缺失的某些底层兼容头文件
-          sudo apt-get install -y lib32gcc-s1 lib32stdc++6
 
       # 4. 源码拉取
       - name: Clone Source Code
@@ -99,10 +56,11 @@ jobs:
       - name: Load Custom Feeds
         run: |
           cd /workdir/openwrt
-          [ -f /tmp/feeds_conf ] && mv /tmp/feeds_conf ./feeds.conf.default
-          if [ -f /tmp/diy-part1.sh ]; then
-            chmod +x /tmp/diy-part1.sh
-            /tmp/diy-part1.sh
+          # 修正路径：直接使用代码库中的文件
+          [ -f $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
+          if [ -f $GITHUB_WORKSPACE/$DIY_P1_SH ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
+            $GITHUB_WORKSPACE/$DIY_P1_SH
           fi
           ./scripts/feeds update -a
           ./scripts/feeds install -a
