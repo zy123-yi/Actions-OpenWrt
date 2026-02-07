@@ -104,7 +104,8 @@ jobs:
         run: |
           cd openwrt
           echo -e "$(nproc) thread compile"
-          make -j$(nproc) || make -j1 V=s
+          #make -j$(nproc) || make -j1 V=s
+          make -j1 V=s
           if [ -n "$(find bin/targets/ -type f -name "*.img*" -o -name "*.vmdk*")" ]; then
             echo "status=success" >> $GITHUB_OUTPUT
           else
