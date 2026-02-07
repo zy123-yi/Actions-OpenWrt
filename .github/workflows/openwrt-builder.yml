@@ -81,25 +81,28 @@ jobs:
       # 4. 加载自定义 Feeds (解决找不到脚本的关键步骤)
       - name: Load custom feeds
         run: |
-          # 明确定义编译目录路径
+          # 定义编译源码的绝对路径
           OP_PATH="/workdir/openwrt"
           
-          # 移动 feeds 配置文件
-          [ -e "$GITHUB_WORKSPACE/$FEEDS_CONF" ] && mv "$GITHUB_WORKSPACE/$FEEDS_CONF" "$OP_PATH/feeds.conf.default"
+          # 1. 移动 feeds 配置文件 (使用 $GITHUB_WORKSPACE 绝对路径)
+          if [ -f "$GITHUB_WORKSPACE/$FEEDS_CONF" ]; then
+            mv "$GITHUB_WORKSPACE/$FEEDS_CONF" "$OP_PATH/feeds.conf.default"
+          fi
           
-          # 校验并执行 diy-part1.sh
+          # 2. 运行 diy-part1.sh
           if [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ]; then
             chmod +x "$GITHUB_WORKSPACE/$DIY_P1_SH"
+            # 进入 openwrt 目录执行脚本，确保脚本内的相对路径操作正确
             cd "$OP_PATH"
             "$GITHUB_WORKSPACE/$DIY_P1_SH"
           else
-            echo "❌ 错误: 在仓库根目录找不到 $DIY_P1_SH"
-            ls -a "$GITHUB_WORKSPACE"
+            echo "❌ 严重错误: 找不到 $GITHUB_WORKSPACE/$DIY_P1_SH"
             exit 1
           fi
           
-          # 执行完脚本后建立软链接，确保后续步骤兼容
+          # 3. 建立软链接，确保后续 cd openwrt 命令在根目录依然有效
           ln -sf "$OP_PATH" "$GITHUB_WORKSPACE/openwrt"
+          
 
       - name: Update & Install feeds
         run: |
