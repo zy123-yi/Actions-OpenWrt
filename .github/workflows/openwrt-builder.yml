@@ -131,22 +131,22 @@ jobs:
         id: package
         run: |
           cd openwrt
-          # 1. 强制生成默认配置
+          # 1. 强制生成配置，补全依赖关系
           make defconfig
           
-          # 2. 先编译工具链的预备环境，防止 download 时报 tools 错误
-          # 这步能解决你看到的 tar/sed failed 报错
-          make tools/tar/compile -j8
-          make tools/sed/compile -j8
+          # 2. 【核心】先手动下载并编译最基础的两个工具，避免 download 脚本误判
+          # 即使它们报错也继续执行 (使用 || true)
+          make tools/tar/compile -j8 || true
+          make tools/sed/compile -j8 || true
           
-          # 3. 正式下载源码包，增加重试机制
-          make download -j16
+          # 3. 正式开始下载，如果失败则重试（针对国内连接 GitHub 经常断流的情况）
+          echo "开始下载源码包..."
+          make download -j16 || make download -j1 V=s
           
-          # 4. 检查是否有下载失败的 0 字节文件并清理
+          # 4. 彻底清理下载失败的 0 字节文件
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
-
-      # 6. 编译 (针对 Shadowsocks-Rust 建议单线程 V=s)
+          
       - name: Compile the firmware
         id: compile
         run: |
