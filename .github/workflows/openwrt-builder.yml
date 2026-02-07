@@ -80,63 +80,67 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 6. 配置加载与“去 Rust”固化
+      # 6. 配置加载与“安全第一”固化 (重点修改位)
       - name: Load Custom Configuration
         run: |
           cd /workdir/openwrt
-          # 修正：从工作区移动配置文件到编译目录
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # 你的 Shadowsocks-Rust 固化逻辑
+          # A. 去除不稳定的 Rust 客户端
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
+          
+          # B. 暴力剔除导致报错的 cryptodev (19号机安全解析不需要它)
+          # 这是修复 Error: package/kernel/cryptodev-linux failed to build 的关键
+          sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
+          echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
+          
+          # C. 确保 Unbound 相关依赖正常 (为安全解析保驾护航)
+          echo "CONFIG_PACKAGE_unbound-anchor=y" >> .config
+          echo "CONFIG_PACKAGE_unbound-control=y" >> .config
           
           if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
             $GITHUB_WORKSPACE/$DIY_P2_SH
           fi
+          
+          # 刷新配置并同步依赖
           make defconfig
 
-      # 7. 专项分段编译 (2026 增强版：防御性编译逻辑)
+      # 7. 专项分段编译 (2026 增强防御版)
       - name: Multi-Stage Compilation
         run: |
           cd /workdir/openwrt
           
-          # A. 环境降噪与容错
-          export CFLAGS="-O2 -Wno-error=all"
-          export CXXFLAGS="-O2 -Wno-error=all"
+          # 环境降噪
           export FORCE_UNSAFE_CONFIGURE=1
           
-          # B. 预检下载 (解决 util-linux 等包卡死)
+          # A. 智能下载
           echo "::group::Step 0 - Smart Download"
-          make defconfig
-          # 关键修复：先创建目录，防止 find 命令报错
-          mkdir -p dl
-          # 清理 0 字节损坏包
-          find dl -size -1k -name "*.tar.*" -exec rm -f {} \;
-          # 执行下载
-          make download -j$(nproc) WGET="wget --timeout=30 --tries=3" || make download -j1 V=s
+          make download -j$(nproc) || make download -j1 V=s
           echo "::endgroup::"
 
-          # C. 工具链编译 (解决 kernel-headers 报错)
+          # B. 工具链编译
           echo "::group::Step 1 - Tools & Toolchain"
-          # 优先保证工具安装，不成功则单线程输出日志
           make tools/install -j$(nproc) || make tools/install -j1 V=s
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          # D. 插件编译 (防御磁盘爆满)
-          echo "::group::Step 2 - Package Compilation"
-          # 每次大步之后清理无用文件，释放磁盘空间
-          df -h
-          make package/compile -j$(nproc) IGNORE_ERRORS=1 || {
-              echo "警告：部分插件编译失败，正在清理磁盘并尝试单线程挽救..."
-              make package/compile -j1 V=s IGNORE_ERRORS=1
-          }
+          # C. 重要：先编译内核头部与配置 (解决 cryptodev 报错的根源)
+          echo "::group::Step 2 - Kernel Preparation"
+          make target/linux/compile -j$(nproc) || make target/linux/compile -j1 V=s
           echo "::endgroup::"
 
-          # E. 最终打包 (生成固件)
-          echo "::group::Step 3 - Final Image Build"
+          # D. 插件编译 (加入容错)
+          echo "::group::Step 3 - Package Compilation"
+          # 使用 IGNORE_ERRORS=1 防止非核心包失败导致 Action 中止
+          make package/compile -j$(nproc) IGNORE_ERRORS=1 || make package/compile -j1 V=s IGNORE_ERRORS=1
+          echo "::endgroup::"
+
+          # E. 最终打包
+          echo "::group::Step 4 - Final Image Build"
+          # 清理临时文件释放空间，确保打包有足够余量
+          rm -rf build_dir/hostpkg build_dir/host build_dir/target-x86_64_musl/cryptodev-linux*
           make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
 
