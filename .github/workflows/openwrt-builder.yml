@@ -1,4 +1,4 @@
-name: OpenWrt Builder
+name: OpenWrt Builder 2026-Pro
 
 on:
   repository_dispatch:
@@ -11,14 +11,13 @@ env:
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
-  UPLOAD_BIN_DIR: false
-  UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    # 升级到最新的 Ubuntu 24.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
@@ -26,185 +25,118 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 1. 强力备份：不再依赖变量，直接在当前目录找文件
-      - name: Backup custom files
-        run: |
-          # 打印当前路径，方便万一报错时排查
-          echo "Current Path: $PWD"
-          # 强制拷贝，如果文件存在就拷走，不存在也不要报错 (使用 || true)
-          cp -v diy-part1.sh /tmp/diy-part1.sh || echo "diy-part1.sh not found"
-          cp -v diy-part2.sh /tmp/diy-part2.sh || echo "diy-part2.sh not found"
-          cp -v .config /tmp/config_file || echo ".config not found"
-          cp -v feeds.conf.default /tmp/feeds_conf || echo "feeds.conf.default not found"
-          # 列出 /tmp 确认备份成功
-          ls -l /tmp/diy-part*
-
-      - name: Maximize build space
+      # 1. 扩容优先（Ubuntu 24.04 的磁盘结构与旧版不同，必须先扩容）
+      - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 512
+          root-reserve-mb: 1024
           swap-size-mb: 1024
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
-          remove-docker-images: 'true'
 
-      - name: Initialization environment
+      # 2. 备份 DIY 脚本到 /tmp 内存区，防止磁盘重挂载丢失文件
+      - name: Backup Scripts
+        run: |
+          cp -v $DIY_P1_SH /tmp/diy-part1.sh || echo "None"
+          cp -v $DIY_P2_SH /tmp/diy-part2.sh || echo "None"
+          [ -f $CONFIG_FILE ] && cp -v $CONFIG_FILE /tmp/config_base || echo "None"
+
+      # 3. 2026 最新依赖库环境初始化
+      - name: Initialization Environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo -E apt-get -qq update
-          # 注意：这里务必使用之前讨论过的精简版安装命令，防止磁盘撑爆
-          sudo -E apt-get -qq install --no-install-recommends ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev gperf pcre2-utils libunistring-dev libxml2-utils
+          # 针对 Ubuntu 24.04 优化的依赖包列表
+          sudo -E apt-get -qq install --no-install-recommends \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio \
+            curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man \
+            intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz \
+            mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools \
+            qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd \
+            zlib1g-dev pcre2-utils libunistring-dev libxml2-utils
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
 
-      - name: Clone source code
+      # 4. 源码拉取
+      - name: Clone Source Code
         working-directory: /workdir
-        run: git clone $REPO_URL -b $REPO_BRANCH openwrt
-
-      - name: Load custom feeds
         run: |
-          OP_PATH="/workdir/openwrt"
-          # 从备份目录还原
-          [ -f /tmp/feeds_conf ] && mv /tmp/feeds_conf $OP_PATH/feeds.conf.default
-          
-          # 执行备份的脚本
+          git clone $REPO_URL -b $REPO_BRANCH openwrt
+          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+      # 5. 执行 DIY1 与 Feeds 更新
+      - name: Load Custom Feeds
+        run: |
+          cd /workdir/openwrt
+          [ -f /tmp/feeds_conf ] && mv /tmp/feeds_conf ./feeds.conf.default
           if [ -f /tmp/diy-part1.sh ]; then
             chmod +x /tmp/diy-part1.sh
-            cd $OP_PATH
             /tmp/diy-part1.sh
           fi
-          
-          # 建立软链接，确保后面步骤 cd openwrt 有效
-          ln -sf $OP_PATH $GITHUB_WORKSPACE/openwrt
-
-      - name: Update & Install feeds
-        run: |
-          cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Load custom configuration
+      # 6. 配置加载与“去 Rust”固化
+      - name: Load Custom Configuration
         run: |
-          # 1. 移动自定义文件（如果存在）
-          [ -e "$GITHUB_WORKSPACE/files" ] && mv "$GITHUB_WORKSPACE/files" openwrt/files
-          
-          # 2. 处理 .config：如果不存在，则先生成默认配置
-          if [ -e "$GITHUB_WORKSPACE/$CONFIG_FILE" ]; then
-            mv "$GITHUB_WORKSPACE/$CONFIG_FILE" openwrt/.config
-            echo "已加载仓库中的自定义 .config"
-          else
-            cd openwrt && make defconfig && cd ..
-            echo "仓库中未找到 .config，已生成默认配置"
+          cd /workdir/openwrt
+          [ -f /tmp/config_base ] && mv /tmp/config_base .config || make defconfig
+          # 彻底移除 Shadowsocks-Rust 及其导致的冲突
+          sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
+          sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
+          if [ -f /tmp/diy-part2.sh ]; then
+            chmod +x /tmp/diy-part2.sh
+            /tmp/diy-part2.sh
           fi
-          
-          # 3. 强制去掉 Rust 组件 (进入目录并确保文件存在)
-          cd openwrt
-          if [ -f .config ]; then
-            # 即使文件中没有这些行，sed 也不会报错
-            sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
-            sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
-            sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
-            # 补充：将这些项彻底设置为 n 以防万一
-            echo "CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n" >> .config
-            echo "CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n" >> .config
-          fi
-          
-          # 4. 执行 DIY2 脚本
-          if [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ]; then
-            chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH"
-            "$GITHUB_WORKSPACE/$DIY_P2_SH"
-          fi
-          
-          # 最后刷一遍配置，自动补全依赖
           make defconfig
 
-      # 后续编译步骤保持不变...
-
-      - name: Download package
-        id: package
+      # 7. 分段分层编译 (核心改进)
+      - name: Multi-Stage Compilation
         run: |
-          cd openwrt
-          # 1. 强制生成配置，补全依赖关系
-          make defconfig
-          
-          # 2. 【核心】先手动下载并编译最基础的两个工具，避免 download 脚本误判
-          # 即使它们报错也继续执行 (使用 || true)
-          make tools/tar/compile -j8 || true
-          make tools/sed/compile -j8 || true
-          
-          # 3. 正式开始下载，如果失败则重试（针对国内连接 GitHub 经常断流的情况）
-          echo "开始下载源码包..."
-          make download -j16 || make download -j1 V=s
-          
-          # 4. 彻底清理下载失败的 0 字节文件
-          find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -exec rm -f {} \;
-          
-      - name: Compile the firmware
-        id: compile
-        run: |
-          cd openwrt
-          
-          # 1. 第一阶段：编译编译工具 (Tools)
-          echo "::group::Step 1 - Build Tools"
+          cd /workdir/openwrt
+          # 第一阶段：编译工具 (Tools)
+          echo "::group::Step 1 - Tools Build"
           make tools/install -j$(nproc) || make tools/install -j1 V=s
           echo "::endgroup::"
 
-          # 2. 第二阶段：编译交叉编译器 (Toolchain)
-          echo "::group::Step 2 - Build Toolchain"
+          # 第二阶段：编译编译器 (Toolchain)
+          echo "::group::Step 2 - Toolchain Build"
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          # 3. 第三阶段：先单独编译软件包 (Packages)
-          # 这样做即使某个包挂了，也不会直接中断整个流程，方便排错
-          echo "::group::Step 3 - Build All Packages"
+          # 第三阶段：下载包与预编译
+          make download -j16
+          
+          # 第四阶段：分步编译插件包
+          echo "::group::Step 3 - Package Build"
           make package/compile -j$(nproc) IGNORE_ERRORS=1 || make package/compile -j1 V=s IGNORE_ERRORS=1
           echo "::endgroup::"
 
-          # 4. 第四阶段：整合并生成固件镜像 (Target Image)
-          echo "::group::Step 4 - Generate Final Image"
+          # 第五阶段：生成镜像
+          echo "::group::Step 4 - Image Build"
           make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
 
-          # 5. 最终校验
-          if [ -n "$(find bin/targets/ -type f -name "*.img*" -o -name "*.vmdk*")" ]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-          else
-            echo "❌ 固件生成失败，正在打印错误日志末尾..."
-            tail -n 100 /tmp/log.txt || true
-            exit 1
-          fi
-
-      # 7. 产物上传
-      - name: Organize files
-        id: organize
-        if: steps.compile.outputs.status == 'success' && !cancelled()
+      # 8. 产物整理与发布
+      - name: Organize Files
         run: |
-          cd openwrt/bin/targets/*/*
+          cd /workdir/openwrt/bin/targets/*/*
           rm -rf packages
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-          echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware directory
-        uses: actions/upload-artifact@v4
-        if: steps.organize.outputs.status == 'success' && !cancelled()
-        with:
-          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-          path: ${{ env.FIRMWARE }}
-
-      - name: Upload firmware to release
+      - name: Upload Release
         uses: softprops/action-gh-release@v2
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        if: env.UPLOAD_RELEASE == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: OpenWrt_x86_64_${{ env.FILE_DATE }}
-          body_path: openwrt/DEVICE_NAME
+          tag_name: OpenWrt_x86_64_${{ github.run_id }}
           files: ${{ env.FIRMWARE }}/*
