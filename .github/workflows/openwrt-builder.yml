@@ -138,8 +138,11 @@ jobs:
           # B. 预检下载 (解决 util-linux 等包卡死)
           echo "::group::Step 0 - Smart Download"
           make defconfig
-          # 清理 0 字节损坏包，设置 30 秒超时，防止无限挂起
+          # 关键修复：先创建目录，防止 find 命令报错
+          mkdir -p dl
+          # 清理 0 字节损坏包
           find dl -size -1k -name "*.tar.*" -exec rm -f {} \;
+          # 执行下载
           make download -j$(nproc) WGET="wget --timeout=30 --tries=3" || make download -j1 V=s
           echo "::endgroup::"
 
