@@ -95,10 +95,21 @@ jobs:
       # 4. DIY 脚本应用（路径锁定修复）
       - name: Load custom feeds
         run: |
-          [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF openwrt/feeds.conf.default
-          chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
-          cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P1_SH
+          # 1. 自动寻找 feeds.conf.default 并移动
+          FEEDS_PATH=$(find $GITHUB_WORKSPACE -name "$FEEDS_CONF" | head -n 1)
+          [ -n "$FEEDS_PATH" ] && mv "$FEEDS_PATH" openwrt/feeds.conf.default
+          
+          # 2. 自动寻找 diy-part1.sh 并赋予权限
+          DIY_P1_PATH=$(find $GITHUB_WORKSPACE -name "$DIY_P1_SH" | head -n 1)
+          if [ -n "$DIY_P1_PATH" ]; then
+            chmod +x "$DIY_P1_PATH"
+            cd openwrt
+            "$DIY_P1_PATH"
+          else
+            echo "错误: 找不到 $DIY_P1_SH，请检查文件名或路径！"
+            ls -R $GITHUB_WORKSPACE
+            exit 1
+          fi
 
       - name: Update & Install feeds
         run: |
@@ -108,11 +119,23 @@ jobs:
 
       - name: Load custom configuration
         run: |
-          [ -e $GITHUB_WORKSPACE/files ] && mv $GITHUB_WORKSPACE/files openwrt/files
-          [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE openwrt/.config
-          chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-          cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P2_SH
+          # 1. 自动寻找 .config
+          CONFIG_PATH=$(find $GITHUB_WORKSPACE -name "$CONFIG_FILE" | head -n 1)
+          [ -n "$CONFIG_PATH" ] && mv "$CONFIG_PATH" openwrt/.config
+          
+          # 2. 自动寻找 files 文件夹
+          FILES_PATH=$(find $GITHUB_WORKSPACE -name "files" -type d | head -n 1)
+          [ -d "$FILES_PATH" ] && mv "$FILES_PATH" openwrt/files
+          
+          # 3. 自动寻找 diy-part2.sh
+          DIY_P2_PATH=$(find $GITHUB_WORKSPACE -name "$DIY_P2_SH" | head -n 1)
+          if [ -n "$DIY_P2_PATH" ]; then
+            chmod +x "$DIY_P2_PATH"
+            cd openwrt
+            "$DIY_P2_PATH"
+          else
+            echo "警告: 找不到 $DIY_P2_SH，跳过执行。"
+          fi
 
       # 5. 下载与编译
       - name: Download package
