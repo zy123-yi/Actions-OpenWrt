@@ -116,8 +116,18 @@ jobs:
         id: package
         run: |
           cd openwrt
+          # 1. 强制生成默认配置
           make defconfig
-          make download -j8
+          
+          # 2. 先编译工具链的预备环境，防止 download 时报 tools 错误
+          # 这步能解决你看到的 tar/sed failed 报错
+          make tools/tar/compile -j8
+          make tools/sed/compile -j8
+          
+          # 3. 正式下载源码包，增加重试机制
+          make download -j16
+          
+          # 4. 检查是否有下载失败的 0 字节文件并清理
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
 
