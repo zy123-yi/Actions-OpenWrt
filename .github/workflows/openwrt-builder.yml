@@ -44,15 +44,15 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           sudo docker image prune --all --force
           sudo -E apt-get -qq update
+          # 核心改动：删掉了 asciidoc-dblatex，只保留必要的 asciidoc
           sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev gperf pcre2-utils libunistring-dev libxml2-utils
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
-          # 为 Shadowsocks-Rust 准备更大空间的缓存目录
-          mkdir -p /home/runner/work/cargo_cache
-          echo "CARGO_HOME=/home/runner/work/cargo_cache" >> $GITHUB_ENV
+          # 增加一个强制修复 dpkg 的步骤，防止之前的残余错误影响后续
+          sudo dpkg --configure -a
 
       - name: Clone source code
         working-directory: /workdir
