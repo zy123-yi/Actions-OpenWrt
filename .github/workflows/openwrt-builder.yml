@@ -86,45 +86,53 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 6. 配置加载与“安全第一”固化 (重点修改位)
+      # 6. 配置加载与“安全第一”固化
       - name: Load Custom Configuration
         run: |
           cd /workdir/openwrt
-          [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
+          # 优先级：1. 仓库内 config > 2. 默认 config
+          [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # A. 去除不稳定的 Rust 客户端
+          # A. 彻底剔除不稳定的组件 (防止编译中断)
+          # 去除 Shadowsocks-Rust
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
           
-          # B. 暴力剔除导致报错的 cryptodev (19号机安全解析不需要它)
-          # 这是修复 Error: package/kernel/cryptodev-linux failed to build 的关键
+          # B. 暴力剔除 cryptodev (核心修复)
+          # 1. 在 config 中禁用
           sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
           echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
+          # 2. 直接物理删除源码目录，彻底断绝依赖关联
+          rm -rf package/kernel/cryptodev-linux
           
-          # C. 确保 Unbound 相关依赖正常 (为安全解析保驾护航)
+          # C. 强化 Unbound 核心依赖
           echo "CONFIG_PACKAGE_unbound-anchor=y" >> .config
           echo "CONFIG_PACKAGE_unbound-control=y" >> .config
           
+          # 执行 DIY-Part2 脚本
           if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
             $GITHUB_WORKSPACE/$DIY_P2_SH
           fi
           
-          # 刷新配置并同步依赖
+          # 刷新配置
           make defconfig
 
+      # 7. 专项分段编译 (2026 增强版)
       - name: Multi-Stage Compilation
         run: |
           cd /workdir/openwrt
           
-          # 1. 注入 22.04 特有的编译器容错（解决 GCC 严格校验问题）
+          # 1. 注入容错环境变量
           export CFLAGS="-O2 -Wno-error=all -Wno-unused-result"
           export CXXFLAGS="-O2 -Wno-error=all -Wno-unused-result"
           export FORCE_UNSAFE_CONFIGURE=1
           
-          # 2. 预检下载（加入重试逻辑）
+          # 2. 预检下载 (带超时重试)
           echo "::group::Step 0 - Smart Download"
-          make download -j$(nproc) || make download -j1 V=s
+          mkdir -p dl
+          find dl -size -1k -name "*.tar.*" -exec rm -f {} \;
+          make download -j$(nproc) WGET="wget --timeout=30 --tries=3" || make download -j1 V=s
           echo "::endgroup::"
 
           # 3. 工具链编译
@@ -133,24 +141,31 @@ jobs:
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          # 4. 内核与目标架构准备 (防止 cryptodev 类错误的核心)
+          # 4. 内核准备 (先于插件编译，确保内核模块环境就绪)
           echo "::group::Step 2 - Target & Linux Preparation"
           make target/linux/compile -j$(nproc) || make target/linux/compile -j1 V=s
           echo "::endgroup::"
 
-          # 5. 插件编译 (开启多线程极限压榨，并忽略非核心错误)
+          # 5. 插件编译 (忽略非核心错误，保障流程继续)
           echo "::group::Step 3 - Package Compilation"
-          # 使用 IGNORE_ERRORS=m (或 1) 允许部分不兼容 6.12 的包失败，不影响最终固件
+          # 编译完成后删除 dl 目录以释放 2-4GB 磁盘空间，供后续打包使用
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
+          rm -rf dl 
           echo "::endgroup::"
 
-          # 6. 镜像生成
+          # 6. 镜像生成 (增加路径校验)
           echo "::group::Step 4 - Image Build"
-          # 编译完成后清理 build_dir 下的巨大临时文件，防止打包时磁盘溢出
-          rm -rf build_dir/target-x86_64_musl/linux-x86_64/cryptodev-linux*
-          make target/install -j$(nproc) || make target/install -j1 V=s
+          # 检查 rootfs 目录是否存在，防止 mksquashfs 报错
+          if [ -d "build_dir/target-x86_64_musl/root-x86" ]; then
+              echo "RootFS directory exists. Starting image packaging..."
+              make target/install -j$(nproc) || make target/install -j1 V=s
+          else
+              echo "Error: root-x86 directory missing! Compilation failed in previous steps."
+              df -h
+              exit 1
+          fi
           echo "::endgroup::"
-
+          
       # 8. 产物整理与发布
       - name: Organize Files
         run: |
