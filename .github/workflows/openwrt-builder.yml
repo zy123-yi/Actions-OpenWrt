@@ -13,10 +13,11 @@ env:
   DIY_P2_SH: diy-part2.sh
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
+  # 统一物理编译路径，彻底解决“找不到目录”问题
+  BUILD_DIR: /mnt/openwrt 
 
 jobs:
   build:
-    # 升级到最新的 Ubuntu 22.04
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -27,11 +28,8 @@ jobs:
 
       - name: Free Disk Space
         run: |
-          # 增加对 Azure 预装大文件的清理
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost /usr/lib/jvm
-          # 彻底清理 Docker 冗余
           sudo docker image prune --all --force
-          # 清理 apt 缓存
           sudo apt-get clean
           df -h
 
@@ -40,44 +38,26 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          # 补充 libzstd-dev (加速内核) 和 libelf-dev (6.12内核必须)
           sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils libzstd-dev libelf-dev
           
-          # 性能补丁：增加 Swap 空间，防止多线程编译内存崩溃
+          # 性能补丁：4G Swap 保证高并发编译不崩溃
           sudo fallocate -l 4G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
 
-      - name: Space Great Migration
-        run: |
-          # 1. 在空间充裕的 /mnt 创建实际的编译目录
-          sudo mkdir -p /mnt/workdir/openwrt
-          sudo chown $USER:$GROUPS /mnt/workdir/openwrt
-          
-          # 2. 关键修复：确保 /workdir 目录本身存在
-          sudo mkdir -p /workdir
-          sudo chown $USER:$GROUPS /workdir
-
-          # 3. 执行软链接
-          ln -sf /mnt/workdir/openwrt /workdir/openwrt
-          
-          # 4. 验证路径
-          ls -ld /workdir/openwrt
-          df -h
-          
-      # 4. 源码拉取
       - name: Clone Source Code
-        working-directory: /workdir
         run: |
-          git clone $REPO_URL -b $REPO_BRANCH openwrt
-          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+          # 直接在物理路径 /mnt 下创建编译目录
+          sudo mkdir -p ${{ env.BUILD_DIR }}
+          sudo chown $USER:$GROUPS ${{ env.BUILD_DIR }}
+          git clone $REPO_URL -b $REPO_BRANCH ${{ env.BUILD_DIR }}
+          # 建立一个到工作区的链接仅供日志查看
+          ln -sf ${{ env.BUILD_DIR }} $GITHUB_WORKSPACE/openwrt
 
-      # 5. 执行 DIY1 与 Feeds 更新
       - name: Load Custom Feeds
         run: |
-          cd /workdir/openwrt
-          # 修正路径：直接使用代码库中的文件
+          cd ${{ env.BUILD_DIR }}
           [ -f $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
           if [ -f $GITHUB_WORKSPACE/$DIY_P1_SH ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
@@ -86,91 +66,76 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 6. 配置加载与“安全第一”固化
-      # 6. 配置加载与“安全第一”固化
       - name: Load Custom Configuration
         run: |
-          cd /workdir/openwrt
-          # 1. 移动基础配置
+          cd ${{ env.BUILD_DIR }}
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # 2. 强力禁止报错模块（无论默认值是什么，一律设为 n）
-          # 解决 cryptodev 内核模块报错
+          # 1. 暴力解决 cryptodev & OpenSSL 报错
           echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
-          
-          # 解决 OpenSSL 编译找不到头文件报错 (核心修复)
           echo "CONFIG_OPENSSL_ENGINE_BUILTIN_DEVCRYPTO=n" >> .config
-          # 额外保险：禁用相关依赖项
           echo "CONFIG_OPENSSL_ENGINE_SUPPORT=n" >> .config
           
-          # 3. 固化 Shadowsocks-Rust 禁用逻辑
+          # 2. 去 Rust 固化
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
           
-          # 4. 刷新并应用配置
+          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+            $GITHUB_WORKSPACE/$DIY_P2_SH
+          fi
           make defconfig
 
-      # 7. 专项分段编译 (2026 增强版)
       - name: Multi-Stage Compilation
         run: |
-          cd /workdir/openwrt
+          cd ${{ env.BUILD_DIR }}
           
-          # 1. 注入容错环境变量
+          # 环境变量：容错 GCC 11+
           export CFLAGS="-O2 -Wno-error=all -Wno-unused-result"
           export CXXFLAGS="-O2 -Wno-error=all -Wno-unused-result"
           export FORCE_UNSAFE_CONFIGURE=1
           
-          # 2. 预检下载 (带超时重试)
+          # Step 0: 稳健下载
           echo "::group::Step 0 - Smart Download"
           mkdir -p dl
-          
-          # 1. 更加激进的损坏包清理（清理所有 0 字节文件）
           find dl -empty -type f -delete
-          
-          # 2. 优先“点杀”核心大包 (利用单线程保证稳定性)
-          # 提前下载核心工具，避免后续多线程抢带宽
-          echo "正在预载核心大包..."
           make package/utils/util-linux/download V=s WGET="wget --timeout=60 --tries=5"
-          
-          # 3. 执行余下的全量下载
           make download -j$(nproc) WGET="wget --timeout=30 --tries=3" || make download -j1 V=s
           echo "::endgroup::"
 
-          # 3. 工具链编译
+          # Step 1: 工具链
           echo "::group::Step 1 - Tools & Toolchain"
           make tools/install -j$(nproc) || make tools/install -j1 V=s
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          # 4. 内核准备 (先于插件编译，确保内核模块环境就绪)
+          # Step 2: 内核准备 (关键：解决 target 目录丢失)
           echo "::group::Step 2 - Target & Linux Preparation"
           make target/linux/compile -j$(nproc) || make target/linux/compile -j1 V=s
           echo "::endgroup::"
 
-          # 5. 插件编译 (忽略非核心错误，保障流程继续)
+          # Step 3: 插件编译
           echo "::group::Step 3 - Package Compilation"
-          # 编译完成后删除 dl 目录以释放 2-4GB 磁盘空间，供后续打包使用
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
-          rm -rf dl 
+          # 打包前清理 dl 释放空间（约 3GB+）
+          rm -rf dl
           echo "::endgroup::"
 
-          # 6. 镜像生成 (增加路径校验)
+          # Step 4: 最终镜像打包
           echo "::group::Step 4 - Image Build"
-          # 检查 rootfs 目录是否存在，防止 mksquashfs 报错
+          # 物理检查目录是否存在
           if [ -d "build_dir/target-x86_64_musl/root-x86" ]; then
-              echo "RootFS directory exists. Starting image packaging..."
               make target/install -j$(nproc) || make target/install -j1 V=s
           else
-              echo "Error: root-x86 directory missing! Compilation failed in previous steps."
-              df -h
+              echo "致命错误：产物目录不存在，可能发生了编译崩溃！"
+              find build_dir/target-x86_64_musl -maxdepth 2 -type d
               exit 1
           fi
           echo "::endgroup::"
-          
-      # 8. 产物整理与发布
+
       - name: Organize Files
         run: |
-          cd /workdir/openwrt/bin/targets/*/*
+          cd ${{ env.BUILD_DIR }}/bin/targets/*/*
           rm -rf packages
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
 
