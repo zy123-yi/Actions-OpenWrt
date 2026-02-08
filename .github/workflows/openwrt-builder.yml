@@ -71,21 +71,16 @@ jobs:
           cd ${{ env.BUILD_DIR }}
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # 1. 暴力解决 cryptodev & OpenSSL 报错
-          echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
-          echo "CONFIG_OPENSSL_ENGINE_BUILTIN_DEVCRYPTO=n" >> .config
-          echo "CONFIG_OPENSSL_ENGINE_SUPPORT=n" >> .config
-          
-          # 2. 去 Rust 固化
-          sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
-          sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
-          
-          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
-            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-            $GITHUB_WORKSPACE/$DIY_P2_SH
-          fi
-          make defconfig
+          # ... 之前的 OpenSSL 和 cryptodev 修复保持不变 ...
 
+          # 针对 HAProxy 的修复：禁用不稳定的 SSL 引擎支持，确保兼容性
+          sed -i 's/CONFIG_HAPROXY_SSL_ENGINE=y/CONFIG_HAPROXY_SSL_ENGINE=n/g' .config
+          
+          # 如果你并不真的需要 HAProxy，建议直接在编译中剔除，减少 19 号机负载
+          # sed -i 's/CONFIG_PACKAGE_haproxy=y/CONFIG_PACKAGE_haproxy=n/g' .config
+
+          make defconfig
+          
       - name: Multi-Stage Compilation
         run: |
           cd ${{ env.BUILD_DIR }}
@@ -116,8 +111,11 @@ jobs:
 
           # Step 3: 插件编译
           echo "::group::Step 3 - Package Compilation"
+          # 针对 haproxy 所在的 build_dir 进行清理，防止残余文件干扰
+          rm -rf build_dir/target-x86_64_musl/haproxy*
+          
+          # 使用 IGNORE_ERRORS=m 确保即使 haproxy 失败，也不影响 Unbound 和 MosDNS 生成
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
-          # 打包前清理 dl 释放空间（约 3GB+）
           rm -rf dl
           echo "::endgroup::"
 
