@@ -90,32 +90,20 @@ jobs:
       - name: Load Custom Configuration
         run: |
           cd /workdir/openwrt
-          # 优先级：1. 仓库内 config > 2. 默认 config
-          [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
+          [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # A. 彻底剔除不稳定的组件 (防止编译中断)
-          # 去除 Shadowsocks-Rust
+          # 1. 彻底禁用 cryptodev 内核模块
+          sed -i 's/CONFIG_PACKAGE_kmod-cryptodev=y/CONFIG_PACKAGE_kmod-cryptodev=n/g' .config
+          echo "# CONFIG_PACKAGE_kmod-cryptodev is not set" >> .config
+
+          # 2. 关键：禁止 OpenSSL 使用 devcrypto 加速引擎 (解决本次报错的核心)
+          # 这样 OpenSSL 就会使用自带的优化算法，不再寻找缺失的头文件
+          sed -i 's/CONFIG_OPENSSL_ENGINE_BUILTIN_DEVCRYPTO=y/CONFIG_OPENSSL_ENGINE_BUILTIN_DEVCRYPTO=n/g' .config
+          echo "# CONFIG_OPENSSL_ENGINE_BUILTIN_DEVCRYPTO is not set" >> .config
+          
+          # 3. 固化 Shadowsocks-Rust 禁用逻辑
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
-          sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
           
-          # B. 暴力剔除 cryptodev (核心修复)
-          # 1. 在 config 中禁用
-          sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
-          echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
-          # 2. 直接物理删除源码目录，彻底断绝依赖关联
-          rm -rf package/kernel/cryptodev-linux
-          
-          # C. 强化 Unbound 核心依赖
-          echo "CONFIG_PACKAGE_unbound-anchor=y" >> .config
-          echo "CONFIG_PACKAGE_unbound-control=y" >> .config
-          
-          # 执行 DIY-Part2 脚本
-          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
-            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-            $GITHUB_WORKSPACE/$DIY_P2_SH
-          fi
-          
-          # 刷新配置
           make defconfig
 
       # 7. 专项分段编译 (2026 增强版)
