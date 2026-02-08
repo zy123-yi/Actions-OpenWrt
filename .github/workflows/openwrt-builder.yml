@@ -43,10 +43,8 @@ jobs:
           sudo apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
           sudo apt-get update
-          # 补充了 6.12 内核及 GCC 编译必须的依赖，剔除了 xmlto/dblatex
           sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils libzstd-dev libelf-dev libgmp-dev libmpfr-dev libmpc-dev
           sudo timedatectl set-timezone "$TZ"
-          # 预创建编译目录并确保在 LVM 卷内
           mkdir -p $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
 
       - name: Clone Source Code
@@ -79,7 +77,15 @@ jobs:
           echo "CONFIG_PACKAGE_python3=n" >> .config
           echo "CONFIG_PACKAGE_node=n" >> .config
 
-          # B. 内核及特定插件优化 (SSR-Plus & Cryptodev)
+          # B. 修复 OpenSSL 编译错误 (关键修改)
+          # 禁用 OpenSSL 的 devcrypto 引擎，防止其寻找已删除的 cryptodev.h
+          sed -i 's/CONFIG_PACKAGE_libopenssl_devcrypto=y/CONFIG_PACKAGE_libopenssl_devcrypto=n/g' .config
+          sed -i '/CONFIG_PACKAGE_libopenssl_devcrypto/d' .config
+          echo "CONFIG_PACKAGE_libopenssl_devcrypto=n" >> .config
+          # 强制修改 OpenSSL Makefile 禁用相关选项
+          sed -i 's/OPENSSL_NO_DEVCRYPTO=n/OPENSSL_NO_DEVCRYPTO=y/g' package/libs/openssl/Makefile
+
+          # C. 内核及特定插件优化 (SSR-Plus & Cryptodev)
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
           sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
           echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
@@ -90,7 +96,6 @@ jobs:
             $GITHUB_WORKSPACE/$DIY_P2_SH
           fi
           
-          # 强制刷新配置并删除冗余符号
           make defconfig
 
       - name: Multi-Stage Compilation
@@ -106,13 +111,11 @@ jobs:
           echo "::group::Step 0 - Smart Download"
           mkdir -p dl
           find dl -size -1k -name "*.tar.*" -delete
-          # 预下载内核，避免 hash 错误
           wget -T 60 -t 5 -P dl/ https://sources.openwrt.org/linux-6.12.69.tar.xz || echo "Kernel download bypass"
           make download -j$(nproc) || make download -j1 V=s
           echo "::endgroup::"
 
           echo "::group::Step 1 - Tools & Toolchain"
-          # 编译 Tools 和 Toolchain，失败自动单线程重试
           make tools/install -j$(nproc) || make tools/install -j1 V=s
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
@@ -122,7 +125,8 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Step 3 - Package Compilation"
-          # sing-box 所在的包编译环节
+          # 如果之前编译过 OpenSSL 失败，强制清理其缓存
+          make package/libs/openssl/clean
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
           rm -rf dl
           echo "::endgroup::"
@@ -135,16 +139,11 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/outputs
           cd $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
-          
-          # 智能查找并拷贝镜像文件
           TARGET_FILE=$(find bin/targets/ -name "*-combined-efi.img.gz" | head -n 1)
           if [ -n "$TARGET_FILE" ]; then
             cp -f $TARGET_FILE $GITHUB_WORKSPACE/outputs/
           fi
-          
-          # 拷贝 sing-box 及其它重要 ipk
           find bin/packages/ -name "sing-box*.ipk" -exec cp {} $GITHUB_WORKSPACE/outputs/ \;
-          
           echo "RELEASE_TAG=OpenWrt_x86_64_$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
 
       - name: Upload Release
