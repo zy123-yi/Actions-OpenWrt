@@ -71,14 +71,19 @@ jobs:
           cd ${{ env.BUILD_DIR }}
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # ... 之前的 OpenSSL 和 cryptodev 修复保持不变 ...
-
-          # 针对 HAProxy 的修复：禁用不稳定的 SSL 引擎支持，确保兼容性
-          sed -i 's/CONFIG_HAPROXY_SSL_ENGINE=y/CONFIG_HAPROXY_SSL_ENGINE=n/g' .config
+          # 1. 彻底禁用导致报错的内核模块（保持之前的设置）
+          echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
+          echo "CONFIG_OPENSSL_ENGINE_BUILTIN_DEVCRYPTO=n" >> .config
           
-          # 如果你并不真的需要 HAProxy，建议直接在编译中剔除，减少 19 号机负载
-          # sed -i 's/CONFIG_PACKAGE_haproxy=y/CONFIG_PACKAGE_haproxy=n/g' .config
+          # 2. 核心修正：针对 PassWall 的 HAProxy 依赖
+          # 显式禁止 HAProxy 尝试连接硬件加密引擎，强制它走纯软件（OpenSSL）路径
+          echo "CONFIG_HAPROXY_SSL_ENGINE=n" >> .config
+          
+          # 3. 22.04 编译环境补丁：修复 Haproxy 与 OpenSSL 3.x 的链接冲突
+          # 这一行确保 PassWall 调用的 haproxy 能够顺利完成链接
+          sed -i 's/CONFIG_PACKAGE_haproxy=y/CONFIG_PACKAGE_haproxy=y\nCONFIG_HAPROXY_SSL=y/g' .config
 
+          # 4. 固化配置并刷新
           make defconfig
           
       - name: Multi-Stage Compilation
