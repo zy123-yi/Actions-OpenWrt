@@ -68,34 +68,40 @@ jobs:
           cd $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # A. 基础组件剔除
+          # 1. 彻底剔除大户组件 (Docker, Python, Node, PHP)
           sed -i '/CONFIG_PACKAGE_docker/d' .config
           sed -i '/CONFIG_PACKAGE_luci-app-dockerman/d' .config
           sed -i '/CONFIG_PACKAGE_python3/d' .config
           sed -i '/CONFIG_PACKAGE_node/d' .config
-          echo "CONFIG_PACKAGE_luci-app-dockerman=n" >> .config
-          echo "CONFIG_PACKAGE_python3=n" >> .config
-          echo "CONFIG_PACKAGE_node=n" >> .config
+          sed -i '/CONFIG_PACKAGE_php/d' .config
+          echo -e "\nCONFIG_PACKAGE_luci-app-dockerman=n\nCONFIG_PACKAGE_python3=n\nCONFIG_PACKAGE_node=n" >> .config
 
-          # B. 【核心修复】强制 OpenSSL 放弃编译 devcrypto
-          # 1. 在配置文件中禁用
-          sed -i 's/CONFIG_PACKAGE_libopenssl_devcrypto=y/CONFIG_PACKAGE_libopenssl_devcrypto=n/g' .config
-          echo "CONFIG_PACKAGE_libopenssl_devcrypto=n" >> .config
-          # 2. 物理删除 OpenSSL 对 devcrypto 的编译指令，防止扫描探测
-          sed -i '/enable-devcrypto/d' package/libs/openssl/Makefile
+          # 2. 【核心修复】强制 OpenSSL 放弃编译 devcrypto (OpenSSL 3.x 加固)
+          # 直接修改 Makefile 禁止 enable-devcrypto 传参，并强制开启 NO_DEVCRYPTO 宏
+          sed -i 's/enable-devcrypto//g' package/libs/openssl/Makefile
           sed -i 's/OPENSSL_NO_DEVCRYPTO=n/OPENSSL_NO_DEVCRYPTO=y/g' package/libs/openssl/Makefile
+          # 在 .config 中显式禁用
+          sed -i '/CONFIG_PACKAGE_libopenssl_devcrypto/d' .config
+          sed -i '/CONFIG_PACKAGE_libopenssl_engine/d' .config
+          echo -e "CONFIG_PACKAGE_libopenssl_devcrypto=n\nCONFIG_PACKAGE_libopenssl_engine=n" >> .config
 
-          # C. 内核插件与 SSR-Plus 优化
-          sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
+          # 3. 插件冲突优化 (SSR-Plus & PassWall)
+          # 统一禁用 Shadowsocks-Rust，因为编译它极其占用磁盘和内存
+          sed -i 's/_INCLUDE_Shadowsocks_Rust_Client=y/_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
+          sed -i 's/_INCLUDE_Shadowsocks_Rust_Server=y/_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
+          
+          # 4. 内核加速与清理
           sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
           echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
           rm -rf package/kernel/cryptodev-linux
-          
+
+          # 5. 执行 DIY2 脚本
           if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
             $GITHUB_WORKSPACE/$DIY_P2_SH
           fi
           
+          # 6. 最后的配置刷新 (执行两次确保存储库依赖树正确)
           make defconfig
 
       - name: Multi-Stage Compilation
