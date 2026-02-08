@@ -100,30 +100,14 @@ jobs:
           # 2. 【核心修复】强制 OpenSSL 放弃编译 devcrypto (OpenSSL 3.x 加固)
           # 直接修改 Makefile 禁止 enable-devcrypto 传参，并强制开启 NO_DEVCRYPTO 宏
           sed -i 's/enable-devcrypto//g' package/libs/openssl/Makefile
-          sed -i 's/OPENSSL_NO_DEVCRYPTO=n/OPENSSL_NO_DEVCRYPTO=y/g' package/libs/openssl/Makefile
-          # 在 .config 中显式禁用
-          sed -i '/CONFIG_PACKAGE_libopenssl_devcrypto/d' .config
-          sed -i '/CONFIG_PACKAGE_libopenssl_engine/d' .config
-          echo -e "CONFIG_PACKAGE_libopenssl_devcrypto=n\nCONFIG_PACKAGE_libopenssl_engine=n" >> .config
-
-          # 3. 插件冲突优化 (SSR-Plus & PassWall)
-          # 统一禁用 Shadowsocks-Rust，因为编译它极其占用磁盘和内存
-          sed -i 's/_INCLUDE_Shadowsocks_Rust_Client=y/_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
-          sed -i 's/_INCLUDE_Shadowsocks_Rust_Server=y/_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
+          echo "::group::Step 3 - Package Compilation"
+          # 必须清理掉上次配置错误的目录，否则它会跳过配置阶段直接报错
+          rm -rf build_dir/target-x86_64_musl/openssl-3.6.1
+          make package/libs/openssl/compile V=s -j1 # 建议先让 OpenSSL 单独过关
           
-          # 4. 内核加速与清理
-          sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
-          echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
-          rm -rf package/kernel/cryptodev-linux
-
-          # 5. 执行 DIY2 脚本
-          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
-            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-            $GITHUB_WORKSPACE/$DIY_P2_SH
-          fi
-          
-          # 6. 最后的配置刷新 (执行两次确保存储库依赖树正确)
-          make defconfig
+          make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
+          rm -rf dl
+          echo "::endgroup::"
 
       - name: Multi-Stage Compilation
         run: |
@@ -152,12 +136,14 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Step 3 - Package Compilation"
-          # 编译前强制清理上次报错的 OpenSSL 残余
-          make package/libs/openssl/clean
+          # 必须清理掉上次配置错误的目录，否则它会跳过配置阶段直接报错
+          rm -rf build_dir/target-x86_64_musl/openssl-3.6.1
+          make package/libs/openssl/compile V=s -j1 # 建议先让 OpenSSL 单独过关
+          
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
           rm -rf dl
           echo "::endgroup::"
-
+          
           echo "::group::Step 4 - Image Build"
           make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
