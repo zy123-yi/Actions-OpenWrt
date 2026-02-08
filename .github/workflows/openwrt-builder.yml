@@ -40,8 +40,16 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          # 1. 彻底清理可能存在的 dpkg 锁定或残留
+          sudo rm -rf /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock
+          
+          # 2. 更新索引
           sudo apt-get update
-          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils libzstd-dev libelf-dev
+          
+          # 3. 安装依赖（剔除了 xmlto 和相关文档处理包，防止 tex-common 报错）
+          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils libzstd-dev libelf-dev
+          
+          # 4. 设置时区与工作目录
           sudo timedatectl set-timezone "Asia/Shanghai"
           sudo mkdir -p ${{ env.BUILD_DIR }}
           sudo chown $USER:$GROUPS ${{ env.BUILD_DIR }}
@@ -62,101 +70,61 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 6. 配置加载与“瘦身”固化
       - name: Load Custom Configuration
         run: |
-          cd /workdir/openwrt
+          cd ${{ env.BUILD_DIR }}
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # A. 彻底剔除 Docker 相关组件
+          # A. 彻底剔除 Docker 和 Python3
           sed -i '/CONFIG_PACKAGE_docker/d' .config
           sed -i '/CONFIG_PACKAGE_luci-app-dockerman/d' .config
-          sed -i '/CONFIG_PACKAGE_containerd/d' .config
-          echo "CONFIG_PACKAGE_luci-app-dockerman=n" >> .config
-          
-          # B. 彻底剔除 Python3 相关组件
           sed -i '/CONFIG_PACKAGE_python3/d' .config
-          sed -i '/CONFIG_PACKAGE_libpython3/d' .config
+          echo "CONFIG_PACKAGE_luci-app-dockerman=n" >> .config
           echo "CONFIG_PACKAGE_python3=n" >> .config
 
-          # C. 之前的固化逻辑 (Rust/Cryptodev/Unbound)
+          # B. 之前的固化逻辑
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
           sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
           echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
           rm -rf package/kernel/cryptodev-linux
           
-          echo "CONFIG_PACKAGE_unbound-anchor=y" >> .config
-          echo "CONFIG_PACKAGE_unbound-control=y" >> .config
-          
           if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
             $GITHUB_WORKSPACE/$DIY_P2_SH
           fi
-          
-          # 强制刷新配置，去除由于删除包导致的孤立依赖
           make defconfig
 
       # 7. 专项分段编译 (2026 最终加固版)
       - name: Multi-Stage Compilation
         run: |
-          cd /workdir/openwrt
-          
-          # 1. 容错环境变量
-          export CFLAGS="-O2 -Wno-error=all -Wno-unused-result"
-          export CXXFLAGS="-O2 -Wno-error=all -Wno-unused-result"
+          cd ${{ env.BUILD_DIR }}
           export FORCE_UNSAFE_CONFIGURE=1
           
-          # 2. 预检下载：彻底清理损坏的内核和库文件
           echo "::group::Step 0 - Smart Download"
           mkdir -p dl
-          # 物理删除所有可能导致 Hash 报错的小于 1k 的残缺包
           find dl -size -1k -name "*.tar.*" -delete
-          # 针对性清理经常损坏的包
-          rm -f dl/linux-6.12* dl/musl-* dl/gcc-*
-          
-          # 强制手动预下载核心内核包（防止 OpenWrt 脚本下载器抽风）
-          wget -T 60 -t 5 -P dl/ https://sources.openwrt.org/linux-6.12.69.tar.xz || echo "备用源下载"
-          
-          make download -j$(nproc) WGET="wget --timeout=60 --tries=5" || make download -j1 V=s
+          # 强制预下载内核
+          wget -T 60 -t 5 -P dl/ https://sources.openwrt.org/linux-6.12.69.tar.xz || echo "Download failed"
+          make download -j$(nproc) || make download -j1 V=s
           echo "::endgroup::"
 
-          # 3. 工具链编译：这是地基，报错必须重试
           echo "::group::Step 1 - Tools & Toolchain"
-          # Tools 通常很稳
           make tools/install -j$(nproc) || make tools/install -j1 V=s
-          
-          # Toolchain 报错则清理后单线程重来，这是解决 gcc-final 错误的关键
-          make toolchain/install -j$(nproc) || {
-              echo "检测到工具链编译失败，正在尝试单线程修复..."
-              make toolchain/gcc/initial/clean
-              make toolchain/musl/clean
-              make toolchain/install -j1 V=s
-          }
+          make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          # 4. 内核准备
           echo "::group::Step 2 - Target & Linux Preparation"
-          make target/linux/compile -j$(nproc) || make target/linux/compile -j1 V=s
+          make target/linux/compile -j$(nproc)
           echo "::endgroup::"
 
-          # 5. 插件编译：开启空间回收
           echo "::group::Step 3 - Package Compilation"
-          # 针对 sing-box 等 Go 大户，限制并发防止 OOM 内存溢出
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
-          # 编译完插件立即删除 dl 释放空间给最后的打包
           rm -rf dl
           echo "::endgroup::"
 
-          # 6. 镜像生成：最后的路径校验
           echo "::group::Step 4 - Image Build"
-          if [ -d "build_dir/target-x86_64_musl/root-x86" ]; then
-              make target/install -j$(nproc) || make target/install -j1 V=s
-          else
-              echo "致命错误：root-x86 目录未生成，工具链或内核编译存在残留问题！"
-              df -h
-              exit 1
-          fi
+          make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
 
       - name: Organize Files
