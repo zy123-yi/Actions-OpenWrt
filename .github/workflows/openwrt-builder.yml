@@ -123,7 +123,16 @@ jobs:
           # 2. 预检下载 (带超时重试)
           echo "::group::Step 0 - Smart Download"
           mkdir -p dl
-          find dl -size -1k -name "*.tar.*" -exec rm -f {} \;
+          
+          # 1. 更加激进的损坏包清理（清理所有 0 字节文件）
+          find dl -empty -type f -delete
+          
+          # 2. 优先“点杀”核心大包 (利用单线程保证稳定性)
+          # 提前下载核心工具，避免后续多线程抢带宽
+          echo "正在预载核心大包..."
+          make package/utils/util-linux/download V=s WGET="wget --timeout=60 --tries=5"
+          
+          # 3. 执行余下的全量下载
           make download -j$(nproc) WGET="wget --timeout=30 --tries=3" || make download -j1 V=s
           echo "::endgroup::"
 
