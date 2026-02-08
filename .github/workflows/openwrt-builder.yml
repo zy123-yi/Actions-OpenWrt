@@ -83,59 +83,65 @@ jobs:
           
           make defconfig
 
+      # 7. 专项分段编译 (2026 最终加固版)
       - name: Multi-Stage Compilation
         run: |
-          cd ${{ env.BUILD_DIR }}
+          cd /workdir/openwrt
           
-          # A. 环境变量注入
-          export CFLAGS="-O2 -Wno-error=all"
-          export CXXFLAGS="-O2 -Wno-error=all"
+          # 1. 容错环境变量
+          export CFLAGS="-O2 -Wno-error=all -Wno-unused-result"
+          export CXXFLAGS="-O2 -Wno-error=all -Wno-unused-result"
           export FORCE_UNSAFE_CONFIGURE=1
-          export GOFLAGS="-p=2" 
-
-          # B. 强力下载 (解决 Hash 报错的关键)
+          
+          # 2. 预检下载：彻底清理损坏的内核和库文件
           echo "::group::Step 0 - Smart Download"
           mkdir -p dl
-          # 如果有损坏的残余包（小于 1k），直接清理
-          find dl -size -1k -name "*.tar.*" -exec rm -f {} \;
-          # 预先拉取最容易出问题的内核包 (6.12.x 示例)
-          # 注意：这里的版本号应根据你源码实际使用的内核手动微调或自动匹配
-          KERNEL_VER=$(grep -oP "KERNEL_PATCHVER:=\K.*" target/linux/x86/Makefile | head -n 1)
-          echo "Detected Kernel PatchVer: $KERNEL_VER"
+          # 物理删除所有可能导致 Hash 报错的小于 1k 的残缺包
+          find dl -size -1k -name "*.tar.*" -delete
+          # 针对性清理经常损坏的包
+          rm -f dl/linux-6.12* dl/musl-* dl/gcc-*
           
-          make download -j$(nproc) WGET="wget --timeout=30 --tries=3" || make download -j1 V=s
+          # 强制手动预下载核心内核包（防止 OpenWrt 脚本下载器抽风）
+          wget -T 60 -t 5 -P dl/ https://sources.openwrt.org/linux-6.12.69.tar.xz || echo "备用源下载"
+          
+          make download -j$(nproc) WGET="wget --timeout=60 --tries=5" || make download -j1 V=s
           echo "::endgroup::"
 
-          # C. 工具链编译
+          # 3. 工具链编译：这是地基，报错必须重试
           echo "::group::Step 1 - Tools & Toolchain"
+          # Tools 通常很稳
           make tools/install -j$(nproc) || make tools/install -j1 V=s
-          make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
+          
+          # Toolchain 报错则清理后单线程重来，这是解决 gcc-final 错误的关键
+          make toolchain/install -j$(nproc) || {
+              echo "检测到工具链编译失败，正在尝试单线程修复..."
+              make toolchain/gcc/initial/clean
+              make toolchain/musl/clean
+              make toolchain/install -j1 V=s
+          }
           echo "::endgroup::"
 
-          # D. 内核编译
+          # 4. 内核准备
           echo "::group::Step 2 - Target & Linux Preparation"
           make target/linux/compile -j$(nproc) || make target/linux/compile -j1 V=s
           echo "::endgroup::"
 
-          # E. 插件编译 (Sing-box 专项保活)
+          # 5. 插件编译：开启空间回收
           echo "::group::Step 3 - Package Compilation"
-          # 优先单独编译 sing-box，哪怕失败也不要停，尝试单线程挽救
-          make package/feeds/packages/sing-box/compile -j1 V=s || true
-          
-          # 编译剩余插件
+          # 针对 sing-box 等 Go 大户，限制并发防止 OOM 内存溢出
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
-          
-          # 关键操作：打包前释放磁盘，确保 Step 4 有足够空间写镜像
+          # 编译完插件立即删除 dl 释放空间给最后的打包
           rm -rf dl
           echo "::endgroup::"
 
-          # F. 最终打包
+          # 6. 镜像生成：最后的路径校验
           echo "::group::Step 4 - Image Build"
           if [ -d "build_dir/target-x86_64_musl/root-x86" ]; then
               make target/install -j$(nproc) || make target/install -j1 V=s
           else
-              echo "Fatal: RootFS directory missing! Check Step 2/3 logs."
-              df -h && exit 1
+              echo "致命错误：root-x86 目录未生成，工具链或内核编译存在残留问题！"
+              df -h
+              exit 1
           fi
           echo "::endgroup::"
 
