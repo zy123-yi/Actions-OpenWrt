@@ -62,25 +62,39 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+      # 6. 配置加载与“瘦身”固化
       - name: Load Custom Configuration
         run: |
-          cd ${{ env.BUILD_DIR }}
+          cd /workdir/openwrt
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # 1. 彻底禁用导致报错的内核模块 (强制同步配置)
+          # A. 彻底剔除 Docker 相关组件
+          sed -i '/CONFIG_PACKAGE_docker/d' .config
+          sed -i '/CONFIG_PACKAGE_luci-app-dockerman/d' .config
+          sed -i '/CONFIG_PACKAGE_containerd/d' .config
+          echo "CONFIG_PACKAGE_luci-app-dockerman=n" >> .config
+          
+          # B. 彻底剔除 Python3 相关组件
+          sed -i '/CONFIG_PACKAGE_python3/d' .config
+          sed -i '/CONFIG_PACKAGE_libpython3/d' .config
+          echo "CONFIG_PACKAGE_python3=n" >> .config
+
+          # C. 之前的固化逻辑 (Rust/Cryptodev/Unbound)
+          sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
+          sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
           sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
           echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
-          echo "CONFIG_OPENSSL_ENGINE_BUILTIN_DEVCRYPTO=n" >> .config
+          rm -rf package/kernel/cryptodev-linux
           
-          # 2. 针对 sing-box 的“减负”处理
-          # 改为模块(m)可大幅降低最后打包时的 rootfs 溢出风险
-          sed -i 's/CONFIG_PACKAGE_sing-box=y/CONFIG_PACKAGE_sing-box=m/g' .config
+          echo "CONFIG_PACKAGE_unbound-anchor=y" >> .config
+          echo "CONFIG_PACKAGE_unbound-control=y" >> .config
           
           if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
             $GITHUB_WORKSPACE/$DIY_P2_SH
           fi
           
+          # 强制刷新配置，去除由于删除包导致的孤立依赖
           make defconfig
 
       # 7. 专项分段编译 (2026 最终加固版)
