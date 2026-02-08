@@ -13,7 +13,6 @@ env:
   DIY_P2_SH: diy-part2.sh
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  # 统一物理编译路径，彻底解决“找不到目录”问题
   BUILD_DIR: /mnt/openwrt 
 
 jobs:
@@ -26,12 +25,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Free Disk Space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost /usr/lib/jvm
-          sudo docker image prune --all --force
-          sudo apt-get clean
-          df -h
+      # 1. 极致空间清理与自动扩容 (解决 sing-box 编译爆磁盘的核心)
+      - name: Maximize Build Space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 4096
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
 
       - name: Initialization Environment
         env:
@@ -39,26 +43,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils libzstd-dev libelf-dev
-          
-          # 性能补丁：4G Swap 保证高并发编译不崩溃
-          sudo fallocate -l 4G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
+          sudo timedatectl set-timezone "Asia/Shanghai"
+          sudo mkdir -p ${{ env.BUILD_DIR }}
+          sudo chown $USER:$GROUPS ${{ env.BUILD_DIR }}
 
       - name: Clone Source Code
         run: |
-          # 直接在物理路径 /mnt 下创建编译目录
-          sudo mkdir -p ${{ env.BUILD_DIR }}
-          sudo chown $USER:$GROUPS ${{ env.BUILD_DIR }}
           git clone $REPO_URL -b $REPO_BRANCH ${{ env.BUILD_DIR }}
-          # 建立一个到工作区的链接仅供日志查看
           ln -sf ${{ env.BUILD_DIR }} $GITHUB_WORKSPACE/openwrt
 
       - name: Load Custom Feeds
         run: |
           cd ${{ env.BUILD_DIR }}
-          [ -f $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
+          [ -f $GITHUB_WORKSPACE/$FEEDS_CONF ] && cp $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
           if [ -f $GITHUB_WORKSPACE/$DIY_P1_SH ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
             $GITHUB_WORKSPACE/$DIY_P1_SH
@@ -69,76 +66,80 @@ jobs:
       - name: Load Custom Configuration
         run: |
           cd ${{ env.BUILD_DIR }}
-          [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
+          [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # 1. 彻底禁用导致报错的内核模块（保持之前的设置）
+          # 1. 彻底禁用 cryptodev 和相关硬件加速（解决内核链接报错）
+          sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
           echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
           echo "CONFIG_OPENSSL_ENGINE_BUILTIN_DEVCRYPTO=n" >> .config
           
-          # 2. 核心修正：针对 PassWall 的 HAProxy 依赖
-          # 显式禁止 HAProxy 尝试连接硬件加密引擎，强制它走纯软件（OpenSSL）路径
+          # 2. 针对 sing-box 和 Go 插件的优化 (防止编译崩溃)
+          # 将 sing-box 这种超大包改为模块编译(m)，减少最终打包 rootfs 的压力
+          sed -i 's/CONFIG_PACKAGE_sing-box=y/CONFIG_PACKAGE_sing-box=m/g' .config
+          
+          # 3. 22.04 下 PassWall 的 HAProxy 兼容性固化
           echo "CONFIG_HAPROXY_SSL_ENGINE=n" >> .config
           
-          # 3. 22.04 编译环境补丁：修复 Haproxy 与 OpenSSL 3.x 的链接冲突
-          # 这一行确保 PassWall 调用的 haproxy 能够顺利完成链接
-          sed -i 's/CONFIG_PACKAGE_haproxy=y/CONFIG_PACKAGE_haproxy=y\nCONFIG_HAPROXY_SSL=y/g' .config
-
-          # 4. 固化配置并刷新
-          make defconfig
+          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+            $GITHUB_WORKSPACE/$DIY_P2_SH
+          fi
           
+          make defconfig
+
       - name: Multi-Stage Compilation
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # 环境变量：容错 GCC 11+
-          export CFLAGS="-O2 -Wno-error=all -Wno-unused-result"
-          export CXXFLAGS="-O2 -Wno-error=all -Wno-unused-result"
+          # 注入针对 Go 和 GCC 的容错环境变量
+          export CFLAGS="-O2 -Wno-error=all"
+          export CXXFLAGS="-O2 -Wno-error=all"
           export FORCE_UNSAFE_CONFIGURE=1
-          
-          # Step 0: 稳健下载
+          # 限制 Go 编译时的并行度，防止内存溢出 (OOM)
+          export GOFLAGS="-p=2" 
+
           echo "::group::Step 0 - Smart Download"
           mkdir -p dl
-          find dl -empty -type f -delete
+          # 优先下载最大的 util-linux
           make package/utils/util-linux/download V=s WGET="wget --timeout=60 --tries=5"
           make download -j$(nproc) WGET="wget --timeout=30 --tries=3" || make download -j1 V=s
           echo "::endgroup::"
 
-          # Step 1: 工具链
           echo "::group::Step 1 - Tools & Toolchain"
           make tools/install -j$(nproc) || make tools/install -j1 V=s
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          # Step 2: 内核准备 (关键：解决 target 目录丢失)
           echo "::group::Step 2 - Target & Linux Preparation"
           make target/linux/compile -j$(nproc) || make target/linux/compile -j1 V=s
           echo "::endgroup::"
 
-          # Step 3: 插件编译
           echo "::group::Step 3 - Package Compilation"
-          # 针对 haproxy 所在的 build_dir 进行清理，防止残余文件干扰
+          # 编译插件阶段：先清理掉可能干扰的残余
           rm -rf build_dir/target-x86_64_musl/haproxy*
+          # 优先尝试单线程编译 sing-box，因为它最吃资源
+          make package/feeds/packages/sing-box/compile -j1 V=s || true
           
-          # 使用 IGNORE_ERRORS=m 确保即使 haproxy 失败，也不影响 Unbound 和 MosDNS 生成
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
+          # 编译完成后立即清理 4GB+ 的源码包，为最后的打包腾出绝对空间
           rm -rf dl
           echo "::endgroup::"
 
-          # Step 4: 最终镜像打包
           echo "::group::Step 4 - Image Build"
-          # 物理检查目录是否存在
           if [ -d "build_dir/target-x86_64_musl/root-x86" ]; then
               make target/install -j$(nproc) || make target/install -j1 V=s
           else
-              echo "致命错误：产物目录不存在，可能发生了编译崩溃！"
-              find build_dir/target-x86_64_musl -maxdepth 2 -type d
-              exit 1
+              echo "致命错误：产物目录缺失！"
+              df -h && exit 1
           fi
           echo "::endgroup::"
 
       - name: Organize Files
         run: |
           cd ${{ env.BUILD_DIR }}/bin/targets/*/*
+          # 移动所有的 .ipk 插件到独立文件夹（因为 sing-box 刚才改成了模块编译）
+          mkdir -p $GITHUB_WORKSPACE/outputs
+          cp -r ${{ env.BUILD_DIR }}/bin/packages/x86_64/* $GITHUB_WORKSPACE/outputs/ || true
           rm -rf packages
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
 
@@ -149,4 +150,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: OpenWrt_x86_64_${{ github.run_id }}
-          files: ${{ env.FIRMWARE }}/*
+          files: |
+            ${{ env.FIRMWARE }}/*
+            $GITHUB_WORKSPACE/outputs/*.ipk
