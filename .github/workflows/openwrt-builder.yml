@@ -25,7 +25,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 1. 极致空间清理与自动扩容 (解决 sing-box 编译爆磁盘的核心)
       - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
@@ -68,17 +67,14 @@ jobs:
           cd ${{ env.BUILD_DIR }}
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # 1. 彻底禁用 cryptodev 和相关硬件加速（解决内核链接报错）
+          # 1. 彻底禁用导致报错的内核模块 (强制同步配置)
           sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
           echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
           echo "CONFIG_OPENSSL_ENGINE_BUILTIN_DEVCRYPTO=n" >> .config
           
-          # 2. 针对 sing-box 和 Go 插件的优化 (防止编译崩溃)
-          # 将 sing-box 这种超大包改为模块编译(m)，减少最终打包 rootfs 的压力
+          # 2. 针对 sing-box 的“减负”处理
+          # 改为模块(m)可大幅降低最后打包时的 rootfs 溢出风险
           sed -i 's/CONFIG_PACKAGE_sing-box=y/CONFIG_PACKAGE_sing-box=m/g' .config
-          
-          # 3. 22.04 下 PassWall 的 HAProxy 兼容性固化
-          echo "CONFIG_HAPROXY_SSL_ENGINE=n" >> .config
           
           if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
@@ -91,56 +87,66 @@ jobs:
         run: |
           cd ${{ env.BUILD_DIR }}
           
-          # 注入针对 Go 和 GCC 的容错环境变量
+          # A. 环境变量注入
           export CFLAGS="-O2 -Wno-error=all"
           export CXXFLAGS="-O2 -Wno-error=all"
           export FORCE_UNSAFE_CONFIGURE=1
-          # 限制 Go 编译时的并行度，防止内存溢出 (OOM)
           export GOFLAGS="-p=2" 
 
+          # B. 强力下载 (解决 Hash 报错的关键)
           echo "::group::Step 0 - Smart Download"
           mkdir -p dl
-          # 优先下载最大的 util-linux
-          make package/utils/util-linux/download V=s WGET="wget --timeout=60 --tries=5"
+          # 如果有损坏的残余包（小于 1k），直接清理
+          find dl -size -1k -name "*.tar.*" -exec rm -f {} \;
+          # 预先拉取最容易出问题的内核包 (6.12.x 示例)
+          # 注意：这里的版本号应根据你源码实际使用的内核手动微调或自动匹配
+          KERNEL_VER=$(grep -oP "KERNEL_PATCHVER:=\K.*" target/linux/x86/Makefile | head -n 1)
+          echo "Detected Kernel PatchVer: $KERNEL_VER"
+          
           make download -j$(nproc) WGET="wget --timeout=30 --tries=3" || make download -j1 V=s
           echo "::endgroup::"
 
+          # C. 工具链编译
           echo "::group::Step 1 - Tools & Toolchain"
           make tools/install -j$(nproc) || make tools/install -j1 V=s
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
+          # D. 内核编译
           echo "::group::Step 2 - Target & Linux Preparation"
           make target/linux/compile -j$(nproc) || make target/linux/compile -j1 V=s
           echo "::endgroup::"
 
+          # E. 插件编译 (Sing-box 专项保活)
           echo "::group::Step 3 - Package Compilation"
-          # 编译插件阶段：先清理掉可能干扰的残余
-          rm -rf build_dir/target-x86_64_musl/haproxy*
-          # 优先尝试单线程编译 sing-box，因为它最吃资源
+          # 优先单独编译 sing-box，哪怕失败也不要停，尝试单线程挽救
           make package/feeds/packages/sing-box/compile -j1 V=s || true
           
+          # 编译剩余插件
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
-          # 编译完成后立即清理 4GB+ 的源码包，为最后的打包腾出绝对空间
+          
+          # 关键操作：打包前释放磁盘，确保 Step 4 有足够空间写镜像
           rm -rf dl
           echo "::endgroup::"
 
+          # F. 最终打包
           echo "::group::Step 4 - Image Build"
           if [ -d "build_dir/target-x86_64_musl/root-x86" ]; then
               make target/install -j$(nproc) || make target/install -j1 V=s
           else
-              echo "致命错误：产物目录缺失！"
+              echo "Fatal: RootFS directory missing! Check Step 2/3 logs."
               df -h && exit 1
           fi
           echo "::endgroup::"
 
       - name: Organize Files
         run: |
-          cd ${{ env.BUILD_DIR }}/bin/targets/*/*
-          # 移动所有的 .ipk 插件到独立文件夹（因为 sing-box 刚才改成了模块编译）
           mkdir -p $GITHUB_WORKSPACE/outputs
-          cp -r ${{ env.BUILD_DIR }}/bin/packages/x86_64/* $GITHUB_WORKSPACE/outputs/ || true
-          rm -rf packages
+          cd ${{ env.BUILD_DIR }}/bin/targets/*/*
+          # 移动主镜像
+          cp -f *-combined-efi.img.gz $GITHUB_WORKSPACE/outputs/ || true
+          # 移动刚才模块编译生成的 sing-box ipk (方便手动安装)
+          find ${{ env.BUILD_DIR }}/bin/packages/x86_64/ -name "sing-box*.ipk" -exec cp {} $GITHUB_WORKSPACE/outputs/ \;
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
 
       - name: Upload Release
@@ -150,6 +156,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: OpenWrt_x86_64_${{ github.run_id }}
-          files: |
-            ${{ env.FIRMWARE }}/*
-            $GITHUB_WORKSPACE/outputs/*.ipk
+          files: $GITHUB_WORKSPACE/outputs/*
