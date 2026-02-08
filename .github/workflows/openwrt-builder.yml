@@ -68,7 +68,7 @@ jobs:
           cd $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # A. 彻底剔除大户组件 (Docker, Python3, Node)
+          # A. 基础组件剔除
           sed -i '/CONFIG_PACKAGE_docker/d' .config
           sed -i '/CONFIG_PACKAGE_luci-app-dockerman/d' .config
           sed -i '/CONFIG_PACKAGE_python3/d' .config
@@ -77,15 +77,15 @@ jobs:
           echo "CONFIG_PACKAGE_python3=n" >> .config
           echo "CONFIG_PACKAGE_node=n" >> .config
 
-          # B. 修复 OpenSSL 编译错误 (关键修改)
-          # 禁用 OpenSSL 的 devcrypto 引擎，防止其寻找已删除的 cryptodev.h
+          # B. 【核心修复】强制 OpenSSL 放弃编译 devcrypto
+          # 1. 在配置文件中禁用
           sed -i 's/CONFIG_PACKAGE_libopenssl_devcrypto=y/CONFIG_PACKAGE_libopenssl_devcrypto=n/g' .config
-          sed -i '/CONFIG_PACKAGE_libopenssl_devcrypto/d' .config
           echo "CONFIG_PACKAGE_libopenssl_devcrypto=n" >> .config
-          # 强制修改 OpenSSL Makefile 禁用相关选项
+          # 2. 物理删除 OpenSSL 对 devcrypto 的编译指令，防止扫描探测
+          sed -i '/enable-devcrypto/d' package/libs/openssl/Makefile
           sed -i 's/OPENSSL_NO_DEVCRYPTO=n/OPENSSL_NO_DEVCRYPTO=y/g' package/libs/openssl/Makefile
 
-          # C. 内核及特定插件优化 (SSR-Plus & Cryptodev)
+          # C. 内核插件与 SSR-Plus 优化
           sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=y/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
           sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
           echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
@@ -103,7 +103,7 @@ jobs:
           cd $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
           export FORCE_UNSAFE_CONFIGURE=1
           
-          # 保护根目录：将 Go 编译缓存导向 99GB 分区
+          # 保护 2GB 根目录：重定向 Go 缓存
           export GOCACHE=$GITHUB_WORKSPACE/${{ env.BUILD_DIR }}/.gocache
           export GOPATH=$GITHUB_WORKSPACE/${{ env.BUILD_DIR }}/.gopath
           mkdir -p $GOCACHE $GOPATH
@@ -125,7 +125,7 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Step 3 - Package Compilation"
-          # 如果之前编译过 OpenSSL 失败，强制清理其缓存
+          # 编译前强制清理上次报错的 OpenSSL 残余
           make package/libs/openssl/clean
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
           rm -rf dl
