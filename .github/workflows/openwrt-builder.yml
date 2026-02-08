@@ -36,38 +36,44 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      - name: Initialization Environment
-        env:
-          DEBIAN_FRONTEND: noninteractive
+      - name: Load Custom Configuration
         run: |
-          # 1. 修复可能已经损坏的 dpkg 状态
-          sudo dpkg --configure -a
-          sudo apt-get -f install -y
+          cd $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
+          [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # 2. 清理并更新，强制禁用“推荐安装”
-          sudo apt-get clean
-          sudo rm -rf /var/lib/apt/lists/*
-          sudo apt-get update
-          
-          # 3. 核心修正：安装时使用 --no-install-recommends，并显式排除 TeX 相关包
-          # 删除了 asciidoc-dblatex, xmlto, dblatex 等所有文档诱饵
-          sudo apt-get install -y --no-install-recommends \
-            ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio \
-            curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf \
-            haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev \
-            libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp \
-            ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools \
-            qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
-            vim wget xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils libzstd-dev libelf-dev \
-            libgmp-dev libmpfr-dev libmpc-dev
-          
-          # 4. 彻底删除可能误装的 TeX 垃圾，确保根目录空间
-          sudo apt-get purge -y tex-common texlive-binaries || true
-          sudo apt-get autoremove -y --purge
-          
-          sudo timedatectl set-timezone "$TZ"
-          mkdir -p $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
+          # 1. 基础组件剔除 (Docker, Python, Node)
+          sed -i '/CONFIG_PACKAGE_docker/d' .config
+          sed -i '/CONFIG_PACKAGE_luci-app-dockerman/d' .config
+          sed -i '/CONFIG_PACKAGE_python3/d' .config
+          sed -i '/CONFIG_PACKAGE_node/d' .config
+          echo -e "\nCONFIG_PACKAGE_luci-app-dockerman=n\nCONFIG_PACKAGE_python3=n\nCONFIG_PACKAGE_node=n" >> .config
 
+          # 2. 【核心修复】使用变量注入而非物理破坏 (解决 Error 255)
+          # 在 .config 中彻底禁用
+          sed -i '/CONFIG_PACKAGE_libopenssl_devcrypto/d' .config
+          sed -i '/CONFIG_PACKAGE_libopenssl_engine/d' .config
+          echo -e "CONFIG_PACKAGE_libopenssl_devcrypto=n\nCONFIG_PACKAGE_libopenssl_engine=n" >> .config
+          
+          # 直接在 OpenSSL 的编译配置里增加强制宏定义，不再 sed 删除 enable-devcrypto
+          # 这种方式最安全，不会破坏 Makefile 结构
+          echo "OPENSSL_OPTIONS += no-devcrypto no-afalgeng" >> package/libs/openssl/Makefile
+
+          # 3. 插件与内核优化 (SSR-Plus & PassWall 兼容性)
+          sed -i 's/_INCLUDE_Shadowsocks_Rust_Client=y/_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
+          sed -i 's/_INCLUDE_Shadowsocks_Rust_Server=y/_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
+          sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
+          echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
+          rm -rf package/kernel/cryptodev-linux
+
+          # 4. 执行 DIY2 脚本
+          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+            $GITHUB_WORKSPACE/$DIY_P2_SH
+          fi
+          
+          # 5. 刷新配置
+          make defconfig
+          
       - name: Clone Source Code
         run: |
           cd $GITHUB_WORKSPACE
