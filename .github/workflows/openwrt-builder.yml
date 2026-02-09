@@ -36,52 +36,26 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      - name: Load Custom Configuration
+      - name: Initialization Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          cd $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
-          [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
-          
-          # 1. 基础组件剔除 (Docker, Python, Node)
-          sed -i '/CONFIG_PACKAGE_docker/d' .config
-          sed -i '/CONFIG_PACKAGE_luci-app-dockerman/d' .config
-          sed -i '/CONFIG_PACKAGE_python3/d' .config
-          sed -i '/CONFIG_PACKAGE_node/d' .config
-          echo -e "\nCONFIG_PACKAGE_luci-app-dockerman=n\nCONFIG_PACKAGE_python3=n\nCONFIG_PACKAGE_node=n" >> .config
+          sudo dpkg --configure -a
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils libzstd-dev libelf-dev libgmp-dev libmpfr-dev libmpc-dev
+          sudo timedatectl set-timezone "$TZ"
 
-          # 2. 【核心修复】使用变量注入而非物理破坏 (解决 Error 255)
-          # 在 .config 中彻底禁用
-          sed -i '/CONFIG_PACKAGE_libopenssl_devcrypto/d' .config
-          sed -i '/CONFIG_PACKAGE_libopenssl_engine/d' .config
-          echo -e "CONFIG_PACKAGE_libopenssl_devcrypto=n\nCONFIG_PACKAGE_libopenssl_engine=n" >> .config
-          
-          # 直接在 OpenSSL 的编译配置里增加强制宏定义，不再 sed 删除 enable-devcrypto
-          # 这种方式最安全，不会破坏 Makefile 结构
-          echo "OPENSSL_OPTIONS += no-devcrypto no-afalgeng" >> package/libs/openssl/Makefile
-
-          # 3. 插件与内核优化 (SSR-Plus & PassWall 兼容性)
-          sed -i 's/_INCLUDE_Shadowsocks_Rust_Client=y/_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
-          sed -i 's/_INCLUDE_Shadowsocks_Rust_Server=y/_INCLUDE_Shadowsocks_Rust_Server=n/g' .config
-          sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
-          echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
-          rm -rf package/kernel/cryptodev-linux
-
-          # 4. 执行 DIY2 脚本
-          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
-            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-            $GITHUB_WORKSPACE/$DIY_P2_SH
-          fi
-          
-          # 5. 刷新配置
-          make defconfig
-          
       - name: Clone Source Code
         run: |
+          # 确保在当前 Workspace 根目录下操作
           cd $GITHUB_WORKSPACE
           git clone $REPO_URL -b $REPO_BRANCH ${{ env.BUILD_DIR }}
+          # 捕捉绝对路径，防止路径偏移
+          echo "OWRT_PATH=$(pwd)/${{ env.BUILD_DIR }}" >> $GITHUB_ENV
 
       - name: Load Custom Feeds
         run: |
-          cd $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
+          cd ${{ env.OWRT_PATH }}
           [ -f $GITHUB_WORKSPACE/$FEEDS_CONF ] && cp $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
           if [ -f $GITHUB_WORKSPACE/$DIY_P1_SH ]; then
             chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
@@ -92,10 +66,10 @@ jobs:
 
       - name: Load Custom Configuration
         run: |
-          cd $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
+          cd ${{ env.OWRT_PATH }}
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
           
-          # 1. 彻底剔除大户组件 (Docker, Python, Node, PHP)
+          # 1. 彻底剔除不需要的大型组件
           sed -i '/CONFIG_PACKAGE_docker/d' .config
           sed -i '/CONFIG_PACKAGE_luci-app-dockerman/d' .config
           sed -i '/CONFIG_PACKAGE_python3/d' .config
@@ -103,32 +77,33 @@ jobs:
           sed -i '/CONFIG_PACKAGE_php/d' .config
           echo -e "\nCONFIG_PACKAGE_luci-app-dockerman=n\nCONFIG_PACKAGE_python3=n\nCONFIG_PACKAGE_node=n" >> .config
 
-          # 2. 【核心修复】强制 OpenSSL 放弃编译 devcrypto (OpenSSL 3.x 加固)
-          # 直接修改 Makefile 禁止 enable-devcrypto 传参，并强制开启 NO_DEVCRYPTO 宏
-          sed -i 's/enable-devcrypto//g' package/libs/openssl/Makefile
-          echo "::group::Step 3 - Package Compilation"
-          # 必须清理掉上次配置错误的目录，否则它会跳过配置阶段直接报错
-          rm -rf build_dir/target-x86_64_musl/openssl-3.6.1
-          make package/libs/openssl/compile V=s -j1 # 建议先让 OpenSSL 单独过关
+          # 2. 【核心修复】OpenSSL 3.x 兼容性加固
+          # 采用注入方式，不破坏 Makefile 结构
+          echo "OPENSSL_OPTIONS += no-devcrypto no-afalgeng" >> package/libs/openssl/Makefile
+          sed -i '/CONFIG_PACKAGE_libopenssl_devcrypto/d' .config
+          echo "CONFIG_PACKAGE_libopenssl_devcrypto=n" >> .config
+
+          # 3. 插件冲突优化
+          sed -i 's/_INCLUDE_Shadowsocks_Rust_Client=y/_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
+          sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
+          rm -rf package/kernel/cryptodev-linux
+
+          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
+            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+            $GITHUB_WORKSPACE/$DIY_P2_SH
+          fi
           
-          make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
-          rm -rf dl
-          echo "::endgroup::"
+          make defconfig
 
       - name: Multi-Stage Compilation
         run: |
-          cd $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
+          cd ${{ env.OWRT_PATH }}
           export FORCE_UNSAFE_CONFIGURE=1
-          
-          # 保护 2GB 根目录：重定向 Go 缓存
-          export GOCACHE=$GITHUB_WORKSPACE/${{ env.BUILD_DIR }}/.gocache
-          export GOPATH=$GITHUB_WORKSPACE/${{ env.BUILD_DIR }}/.gopath
+          export GOCACHE=${{ env.OWRT_PATH }}/.gocache
+          export GOPATH=${{ env.OWRT_PATH }}/.gopath
           mkdir -p $GOCACHE $GOPATH
           
-          echo "::group::Step 0 - Smart Download"
-          mkdir -p dl
-          find dl -size -1k -name "*.tar.*" -delete
-          wget -T 60 -t 5 -P dl/ https://sources.openwrt.org/linux-6.12.69.tar.xz || echo "Kernel download bypass"
+          echo "::group::Step 0 - Download & Preparation"
           make download -j$(nproc) || make download -j1 V=s
           echo "::endgroup::"
 
@@ -137,31 +112,31 @@ jobs:
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          echo "::group::Step 2 - Target & Linux Preparation"
-          make target/linux/compile -j$(nproc)
+          echo "::group::Step 2 - Target & Libc Fix"
+          # 显式安装 libc 基础库，防止 libcrypto 报错
+          make package/libs/toolchain/install -j$(nproc)
           echo "::endgroup::"
 
-          echo "::group::Step 3 - Package Compilation"
-          # 必须清理掉上次配置错误的目录，否则它会跳过配置阶段直接报错
-          rm -rf build_dir/target-x86_64_musl/openssl-3.6.1
-          make package/libs/openssl/compile V=s -j1 # 建议先让 OpenSSL 单独过关
-          
+          echo "::group::Step 3 - OpenSSL Specialized Build"
+          # 强制清理并单独编译 OpenSSL，确保过关
+          make package/libs/openssl/clean
+          make package/libs/openssl/compile V=s -j1
+          echo "::endgroup::"
+
+          echo "::group::Step 4 - Full Package Compilation"
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
-          rm -rf dl
           echo "::endgroup::"
           
-          echo "::group::Step 4 - Image Build"
+          echo "::group::Step 5 - Image Build"
           make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
 
       - name: Organize Files
         run: |
+          cd ${{ env.OWRT_PATH }}
           mkdir -p $GITHUB_WORKSPACE/outputs
-          cd $GITHUB_WORKSPACE/${{ env.BUILD_DIR }}
           TARGET_FILE=$(find bin/targets/ -name "*-combined-efi.img.gz" | head -n 1)
-          if [ -n "$TARGET_FILE" ]; then
-            cp -f $TARGET_FILE $GITHUB_WORKSPACE/outputs/
-          fi
+          [ -n "$TARGET_FILE" ] && cp -f $TARGET_FILE $GITHUB_WORKSPACE/outputs/
           find bin/packages/ -name "sing-box*.ipk" -exec cp {} $GITHUB_WORKSPACE/outputs/ \;
           echo "RELEASE_TAG=OpenWrt_x86_64_$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
 
