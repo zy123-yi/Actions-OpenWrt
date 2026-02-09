@@ -103,32 +103,31 @@ jobs:
           export GOPATH=${{ env.OWRT_PATH }}/.gopath
           mkdir -p $GOCACHE $GOPATH
           
-          # 1. 【新增】强制清理 staging_dir 的残留，防止 toolchain 安装冲突
-          echo "::group::Cleanup Potential Conflicts"
-          rm -rf staging_dir/target-x86_64_musl
-          rm -rf build_dir/target-x86_64_musl
+          echo "::group::Step 1 - Build Tools"
+          # 编译主机环境所需的辅助工具
+          make tools/install -j$(nproc) || make tools/install -j1 V=s
           echo "::endgroup::"
 
-          echo "::group::Step 1 - Tools & Toolchain"
-          # 先单独安装 tools，这是 toolchain 的基础
-          make tools/install -j$(nproc) || make tools/install -j1 V=s
-          # 针对 toolchain 失败，尝试单线程安装并输出详细日志
+          echo "::group::Step 2 - Build Toolchain"
+          # 编译交叉编译器 (GCC, Binutils, Musl/Glibc)
+          # 注意：这里直接用 toolchain/install，不要带 package/ 前缀
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
-          echo "::group::Step 2 - Target & Libc Fix"
-          # 强制安装基础库，并增加详细日志记录输出
-          make package/libs/toolchain/install V=s -j1
-          echo "::endgroup::"
-
-          echo "::group::Step 3 - OpenSSL Specialized Build"
+          echo "::group::Step 3 - Specialized OpenSSL Fix"
+          # 此时工具链已就位，可以单独处理 OpenSSL
+          # 强制清理并单独编译，确保之前的 no-devcrypto 参数生效
           make package/libs/openssl/clean
           make package/libs/openssl/compile V=s -j1
           echo "::endgroup::"
 
           echo "::group::Step 4 - Full Package Compilation"
-          # 如果之前报错，这里建议先跑一次单线程扫描
+          # 核心插件编译
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
+          echo "::endgroup::"
+          
+          echo "::group::Step 5 - Image Build"
+          make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
 
       - name: Organize Files
