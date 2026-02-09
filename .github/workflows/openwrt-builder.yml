@@ -103,32 +103,32 @@ jobs:
           export GOPATH=${{ env.OWRT_PATH }}/.gopath
           mkdir -p $GOCACHE $GOPATH
           
-          echo "::group::Step 0 - Download & Preparation"
-          make download -j$(nproc) || make download -j1 V=s
+          # 1. 【新增】强制清理 staging_dir 的残留，防止 toolchain 安装冲突
+          echo "::group::Cleanup Potential Conflicts"
+          rm -rf staging_dir/target-x86_64_musl
+          rm -rf build_dir/target-x86_64_musl
           echo "::endgroup::"
 
           echo "::group::Step 1 - Tools & Toolchain"
+          # 先单独安装 tools，这是 toolchain 的基础
           make tools/install -j$(nproc) || make tools/install -j1 V=s
+          # 针对 toolchain 失败，尝试单线程安装并输出详细日志
           make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
           echo "::endgroup::"
 
           echo "::group::Step 2 - Target & Libc Fix"
-          # 显式安装 libc 基础库，防止 libcrypto 报错
-          make package/libs/toolchain/install -j$(nproc)
+          # 强制安装基础库，并增加详细日志记录输出
+          make package/libs/toolchain/install V=s -j1
           echo "::endgroup::"
 
           echo "::group::Step 3 - OpenSSL Specialized Build"
-          # 强制清理并单独编译 OpenSSL，确保过关
           make package/libs/openssl/clean
           make package/libs/openssl/compile V=s -j1
           echo "::endgroup::"
 
           echo "::group::Step 4 - Full Package Compilation"
+          # 如果之前报错，这里建议先跑一次单线程扫描
           make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
-          echo "::endgroup::"
-          
-          echo "::group::Step 5 - Image Build"
-          make target/install -j$(nproc) || make target/install -j1 V=s
           echo "::endgroup::"
 
       - name: Organize Files
