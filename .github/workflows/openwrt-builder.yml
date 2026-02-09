@@ -111,9 +111,12 @@ jobs:
           cd openwrt
           make defconfig
           ./scripts/feeds install -a
+          # 第一次下载
           make download -j8
-          find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -exec rm -f {} \;
+          # 强化清理：删除所有小于 10KB 的包（正常源码包很少小于 10KB）
+          find dl -size -10k -exec rm -f {} \;
+          # 补漏下载
+          make download -j$(nproc)
 
       - name: Compile the firmware
         id: compile
