@@ -68,30 +68,24 @@ jobs:
         run: |
           cd ${{ env.OWRT_PATH }}
           [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
-          
-          # 1. 彻底剔除不需要的大型组件
-          sed -i '/CONFIG_PACKAGE_docker/d' .config
-          sed -i '/CONFIG_PACKAGE_luci-app-dockerman/d' .config
-          sed -i '/CONFIG_PACKAGE_python3/d' .config
-          sed -i '/CONFIG_PACKAGE_node/d' .config
-          sed -i '/CONFIG_PACKAGE_php/d' .config
-          echo -e "\nCONFIG_PACKAGE_luci-app-dockerman=n\nCONFIG_PACKAGE_python3=n\nCONFIG_PACKAGE_node=n" >> .config
 
-          # 2. 【核心修复】OpenSSL 3.x 兼容性加固
-          # 采用注入方式，不破坏 Makefile 结构
+          # 1. 【核心手术】彻底切除导致报错的 devcrypto 编译项
+          # 第一步：修改 OpenSSL Makefile，移除 enable-devcrypto 参数
+          sed -i 's/enable-devcrypto//g' package/libs/openssl/Makefile
+          # 第二步：强制设置宏定义，关闭 devcrypto
           echo "OPENSSL_OPTIONS += no-devcrypto no-afalgeng" >> package/libs/openssl/Makefile
+
+          # 2. 移除 Rust 冲突（防止磁盘爆满和编译失败）
+          sed -i 's/_INCLUDE_Shadowsocks_Rust_Client=y/_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
+          
+          # 3. 确保 .config 中禁用了相关内核模块
           sed -i '/CONFIG_PACKAGE_libopenssl_devcrypto/d' .config
           echo "CONFIG_PACKAGE_libopenssl_devcrypto=n" >> .config
-
-          # 3. 插件冲突优化
-          sed -i 's/_INCLUDE_Shadowsocks_Rust_Client=y/_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
           sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
-          rm -rf package/kernel/cryptodev-linux
+          echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
 
-          if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
-            chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-            $GITHUB_WORKSPACE/$DIY_P2_SH
-          fi
+          # 执行 DIY2 脚本
+          [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ] && chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH && $GITHUB_WORKSPACE/$DIY_P2_SH
           
           make defconfig
 
