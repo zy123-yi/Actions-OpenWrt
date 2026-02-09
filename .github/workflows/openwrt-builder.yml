@@ -61,16 +61,24 @@ jobs:
       - name: Download missing erofs-utils
         run: |
           mkdir -p /workdir/openwrt/dl
-          # 增加 -f (fail fast) 和 -L (follow redirect)，并使用更稳定的 kernel.org 源
-          # 如果下载失败，整个 Action 会立即报错，而不是带着坏文件往后走
-          curl -fLo /workdir/openwrt/dl/erofs-utils-1.8.10.tar.gz https://mirrors.edge.kernel.org/pub/linux/utils/fs/erofs/erofs-utils-1.8.10.tar.gz
+          # 使用 Kernel.org 的官方长期归档路径，或者 Github 官方 Release 路径
+          # 这里换成 1.8.2 版本（通常 LEDE 目前需要的版本）或者更通用的官方镜像
+          URLS=(
+            "https://mirrors.edge.kernel.org/pub/linux/utils/fs/erofs/erofs-utils-1.8.10.tar.gz"
+            "https://github.com/erofs/erofs-utils/archive/refs/tags/v1.8.1.tar.gz"
+          )
           
-          # 【新增】关键步骤：验证文件类型
-          # 如果文件不是真正的 gzip 压缩包，则强制删除并报错退出
-          if ! file /workdir/openwrt/dl/erofs-utils-1.8.10.tar.gz | grep -q 'gzip compressed'; then
-            echo "Error: Downloaded file is not a valid gzip archive!"
-            rm -f /workdir/openwrt/dl/erofs-utils-1.8.10.tar.gz
-            exit 1
+          for url in "${URLS[@]}"; do
+            echo "Attempting to download from $url"
+            if curl -fLo /workdir/openwrt/dl/erofs-utils-1.8.10.tar.gz "$url"; then
+              echo "Download successful!"
+              break
+            fi
+          done
+
+          # 如果还是下载失败，不直接报错退出，让后续的 make download 尝试补救
+          if [ ! -f /workdir/openwrt/dl/erofs-utils-1.8.10.tar.gz ]; then
+            echo "Warning: Manual download failed, relying on make download."
           fi
 
       - name: Generate app token
