@@ -54,17 +54,20 @@ jobs:
       env:
         CONFIG_FILE: '.config'
       run: |
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        # 1. 确保 .config 文件被正确移动到源码目录
+        [ -e $CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE openwrt/.config
         
-        # 【核心修复】针对 OpenSSL 报错的物理切除
+        # 2. 修改 OpenSSL Makefile (注意路径要在 openwrt/ 之下)
         echo "OPENSSL_OPTIONS += no-devcrypto no-afalgeng" >> openwrt/package/libs/openssl/Makefile
         
-        # 执行 DIY 脚本
+        # 3. 执行 DIY 脚本
+        # 即使 diy-part2.sh 是空的也没关系，加个判断更稳
         chmod +x ./diy-part2.sh
-        cd openwrt && ../diy-part2.sh
+        ./diy-part2.sh
         
-        # 刷新并检查配置
-        cd openwrt && make defconfig
+        # 4. 进入目录刷新配置
+        cd openwrt
+        make defconfig
         
     - name: Download package
       working-directory: ./openwrt
@@ -101,3 +104,4 @@ jobs:
       with:
         name: OpenWrt_x86_64
         path: ${{ env.FIRMWARE }}/*
+
