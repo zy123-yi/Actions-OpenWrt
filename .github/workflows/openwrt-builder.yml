@@ -1,4 +1,4 @@
-name: OpenWrt Builder 2026-Pro
+name: OpenWrt Builder
 
 on:
   repository_dispatch:
@@ -11,9 +11,10 @@ env:
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
+  UPLOAD_BIN_DIR: false
+  UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  BUILD_DIR: openwrt 
 
 jobs:
   build:
@@ -25,119 +26,136 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Maximize Build Space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 2048
-          swap-size-mb: 4096
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
-          remove-docker-images: 'true'
-
-      - name: Initialization Environment
+      - name: Initialization environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo dpkg --configure -a
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ack antlr3 asciidoc autoconf automake autopoint binutils bison bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libglib2.0-dev libltdl-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xxd zlib1g-dev pcre2-utils libunistring-dev libxml2-utils libzstd-dev libelf-dev libgmp-dev libmpfr-dev libmpc-dev
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev gperf pcre2-utils libunistring-dev libxml2-utils
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
           sudo timedatectl set-timezone "$TZ"
+          sudo mkdir -p /workdir
+          sudo chown $USER:$GROUPS /workdir
 
-      - name: Clone Source Code
-        run: |
-          # 确保在当前 Workspace 根目录下操作
-          cd $GITHUB_WORKSPACE
-          git clone $REPO_URL -b $REPO_BRANCH ${{ env.BUILD_DIR }}
-          # 捕捉绝对路径，防止路径偏移
-          echo "OWRT_PATH=$(pwd)/${{ env.BUILD_DIR }}" >> $GITHUB_ENV
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
 
-      - name: Load Custom Feeds
+      - name: Clone source code
+        working-directory: /workdir
         run: |
-          cd ${{ env.OWRT_PATH }}
-          [ -f $GITHUB_WORKSPACE/$FEEDS_CONF ] && cp $GITHUB_WORKSPACE/$FEEDS_CONF ./feeds.conf.default
-          if [ -f $GITHUB_WORKSPACE/$DIY_P1_SH ]; then
-            chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
-            $GITHUB_WORKSPACE/$DIY_P1_SH
-          fi
+          df -hT $PWD
+          git clone $REPO_URL -b $REPO_BRANCH openwrt
+          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: Download missing erofs-utils
+        run: |
+          mkdir -p /workdir/openwrt/dl
+          curl -L https://mirrors.edge.kernel.org/pub/linux/utils/fs/erofs/erofs-utils-1.8.10.tar.gz -o /workdir/openwrt/dl/erofs-utils-1.8.10.tar.gz
+
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+             app-id: ${{ vars.APP_ID }}
+             private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Setup credentials to access github using app-token
+        run: |
+          git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf https://github.com/
+
+      - name: Load custom feeds
+        run: |
+          [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+          chmod +x $DIY_P1_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P1_SH
+
+      - name: Update & Install feeds
+        run: |
+          cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Load Custom Configuration
+      - name: Load custom configuration
         run: |
-          cd ${{ env.OWRT_PATH }}
-          [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config || make defconfig
+          [ -e files ] && mv files openwrt/files
+          [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+          chmod +x $DIY_P2_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P2_SH
 
-          # 1. 【核心手术】彻底切除导致报错的 devcrypto 编译项
-          # 第一步：修改 OpenSSL Makefile，移除 enable-devcrypto 参数
-          sed -i 's/enable-devcrypto//g' package/libs/openssl/Makefile
-          # 第二步：强制设置宏定义，关闭 devcrypto
-          echo "OPENSSL_OPTIONS += no-devcrypto no-afalgeng" >> package/libs/openssl/Makefile
-
-          # 2. 移除 Rust 冲突（防止磁盘爆满和编译失败）
-          sed -i 's/_INCLUDE_Shadowsocks_Rust_Client=y/_INCLUDE_Shadowsocks_Rust_Client=n/g' .config
-          
-          # 3. 确保 .config 中禁用了相关内核模块
-          sed -i '/CONFIG_PACKAGE_libopenssl_devcrypto/d' .config
-          echo "CONFIG_PACKAGE_libopenssl_devcrypto=n" >> .config
-          sed -i '/CONFIG_PACKAGE_kmod-cryptodev/d' .config
-          echo "CONFIG_PACKAGE_kmod-cryptodev=n" >> .config
-
-          # 执行 DIY2 脚本
-          [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ] && chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH && $GITHUB_WORKSPACE/$DIY_P2_SH
-          
+      - name: Download package
+        id: package
+        run: |
+          cd openwrt
           make defconfig
+          ./scripts/feeds install -a
+          make download -j8
+          find dl -size -1024c -exec ls -l {} \;
+          find dl -size -1024c -exec rm -f {} \;
 
-      - name: Multi-Stage Compilation
+      - name: Compile the firmware
+        id: compile
         run: |
-          cd ${{ env.OWRT_PATH }}
-          export FORCE_UNSAFE_CONFIGURE=1
-          export GOCACHE=${{ env.OWRT_PATH }}/.gocache
-          export GOPATH=${{ env.OWRT_PATH }}/.gopath
-          mkdir -p $GOCACHE $GOPATH
-          
-          echo "::group::Step 1 - Build Tools"
-          # 编译主机环境所需的辅助工具
-          make tools/install -j$(nproc) || make tools/install -j1 V=s
-          echo "::endgroup::"
+          cd openwrt
+          echo -e "$(nproc) thread compile"
+          make -j$(nproc) || make -j1 V=s
+          if [ -n "$(find bin/targets/ -type f -name "*.img*" -o -name "*.vmdk*")" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "编译失败：未生成镜像文件"
+            exit 1
+          fi
+          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-          echo "::group::Step 2 - Build Toolchain"
-          # 编译交叉编译器 (GCC, Binutils, Musl/Glibc)
-          # 注意：这里直接用 toolchain/install，不要带 package/ 前缀
-          make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
-          echo "::endgroup::"
+      - name: Check space usage
+        if: (!cancelled())
+        run: df -hT
 
-          echo "::group::Step 3 - Specialized OpenSSL Fix"
-          # 此时工具链已就位，可以单独处理 OpenSSL
-          # 强制清理并单独编译，确保之前的 no-devcrypto 参数生效
-          make package/libs/openssl/clean
-          make package/libs/openssl/compile V=s -j1
-          echo "::endgroup::"
-
-          echo "::group::Step 4 - Full Package Compilation"
-          # 核心插件编译
-          make package/compile -j$(nproc) IGNORE_ERRORS=m || make package/compile -j1 V=s IGNORE_ERRORS=m
-          echo "::endgroup::"
-          
-          echo "::group::Step 5 - Image Build"
-          make target/install -j$(nproc) || make target/install -j1 V=s
-          echo "::endgroup::"
-
-      - name: Organize Files
+      - name: Organize files
+        id: organize
+        if: steps.compile.outputs.status == 'success' && !cancelled()
         run: |
-          cd ${{ env.OWRT_PATH }}
-          mkdir -p $GITHUB_WORKSPACE/outputs
-          TARGET_FILE=$(find bin/targets/ -name "*-combined-efi.img.gz" | head -n 1)
-          [ -n "$TARGET_FILE" ] && cp -f $TARGET_FILE $GITHUB_WORKSPACE/outputs/
-          find bin/packages/ -name "sing-box*.ipk" -exec cp {} $GITHUB_WORKSPACE/outputs/ \;
-          echo "RELEASE_TAG=OpenWrt_x86_64_$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+          cd openwrt/bin/targets/x86/64
+          rm -rf packages
+          echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+          echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload Release
+      - name: Upload firmware directory
+        uses: actions/upload-artifact@v4
+        if: steps.organize.outputs.status == 'success' && !cancelled()
+        with:
+          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+          path: ${{ env.FIRMWARE }}
+
+      - name: Generate release tag
+        id: tag
+        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        run: |
+          echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+          touch release.txt
+          echo "🔥 LEDE Firmware for x86_64" >> release.txt
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Upload firmware to release
         uses: softprops/action-gh-release@v2
-        if: env.UPLOAD_RELEASE == 'true'
+        if: steps.tag.outputs.status == 'success' && !cancelled()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: $GITHUB_WORKSPACE/outputs/*
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          body_path: release.txt
+          files: ${{ env.FIRMWARE }}/*
