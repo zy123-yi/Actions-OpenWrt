@@ -147,10 +147,12 @@ jobs:
 
       - name: Upload firmware to release
         uses: softprops/action-gh-release@v2
-        if: env.UPLOAD_RELEASE == 'true' && steps.tag.outputs.status == 'success' && !cancelled()
+        # 简化判断：只要开启了开关且没被取消就执行
+        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
+        # 这里的 tag 也可以直接在这里定义，不用引用 steps.tag
+          tag_name: ${{ steps.tag.outputs.release_tag || 'Manual-Build' }}
           body: "🔥 LEDE Firmware for x86_64"
           files: ${{ env.FIRMWARE }}/*
