@@ -71,6 +71,9 @@ jobs:
       - name: Load custom feeds
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+          # 【新增】添加 daed 仓库
+          echo "src-git daed https://github.com/dae-universe/luci-app-daed.git" >> openwrt/feeds.conf.default
+          
           chmod +x $DIY_P1_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P1_SH
@@ -86,7 +89,14 @@ jobs:
           [ -e files ] && mv files openwrt/files
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
           
-          # 【补丁】注入 OpenSSL 修复逻辑，防止 e_devcrypto.o 报错
+          # 【新增】强制开启 eBPF 相关内核配置，确保 6.12 内核支持 daed
+          echo "CONFIG_DEBUG_INFO_BTF=y" >> openwrt/.config
+          echo "CONFIG_BPF=y" >> openwrt/.config
+          echo "CONFIG_BPF_SYSCALL=y" >> openwrt/.config
+          echo "CONFIG_BPF_JIT=y" >> openwrt/.config
+          echo "CONFIG_CGROUP_BPF=y" >> openwrt/.config
+          
+          # 注入 OpenSSL 修复逻辑 (保留你原有的)
           echo "OPENSSL_OPTIONS += no-devcrypto no-afalgeng" >> openwrt/package/libs/openssl/Makefile
           
           chmod +x $DIY_P2_SH
@@ -98,13 +108,10 @@ jobs:
         run: |
           cd openwrt
           make defconfig
-          
-          # 【关键修复】清理之前的坏包记录
-          rm -rf dl/erofs-utils-*.tar.gz
-          rm -rf build_dir/host/erofs-utils-*
-          
+          # 强化清理
+          rm -rf dl/erofs-utils-* build_dir/host/erofs-utils-*
+          # 使用适当的线程数下载
           make download -j8
-          # 强化清理：删除 404 网页或坏包（小于 10KB）
           find dl -size -10k -exec rm -f {} \;
           make download -j$(nproc)
 
@@ -129,6 +136,13 @@ jobs:
           [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          echo "release_tag=Lede_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+          echo "status=success" >> $GITHUB_OUTPUT
+          
       - name: Organize files
         id: organize
         if: steps.compile.outputs.status == 'success' && !cancelled()
@@ -147,12 +161,10 @@ jobs:
 
       - name: Upload firmware to release
         uses: softprops/action-gh-release@v2
-        # 简化判断：只要开启了开关且没被取消就执行
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-        # 这里的 tag 也可以直接在这里定义，不用引用 steps.tag
-          tag_name: ${{ steps.tag.outputs.release_tag || 'Manual-Build' }}
-          body: "🔥 LEDE Firmware for x86_64"
+          tag_name: ${{ steps.tag.outputs.release_tag }} # 现在这里有值了
+          body: "🔥 LEDE Firmware for x86_64 (i7-5500U Optimized)"
           files: ${{ env.FIRMWARE }}/*
