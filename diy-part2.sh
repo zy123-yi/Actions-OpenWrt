@@ -29,3 +29,11 @@ echo "CONFIG_KERNEL_DEBUG_INFO_BTF=y" >> .config
 # 4. (可选) 清理冲突的旧包，确保从你添加的 feed 源编译 daed
 rm -rf package/feeds/luci/luci-app-daed
 rm -rf package/feeds/daed/daed
+
+# 强制开启 Nftables 队列内核支持 (针对 6.12 内核)
+echo "CONFIG_NETFILTER_XT_TARGET_NFQUEUE=y" >> target/linux/x86/config-6.12
+echo "CONFIG_NFT_QUEUE=y" >> target/linux/x86/config-6.12
+
+# 强制选中 IPK 包
+echo "CONFIG_PACKAGE_kmod-nft-queue=y" >> .config
+echo "CONFIG_PACKAGE_kmod-nfnetlink-queue=y" >> .config
