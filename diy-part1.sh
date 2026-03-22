@@ -1,9 +1,13 @@
 #!/bin/bash
-# 彻底清空所有第三方源，防止 feeds 脚本去尝试克隆它们
 
-#!/bin/bash
-# 1. 添加 helloworld (SSR Plus+) 源
-# echo 'src-git helloworld https://github.com/fw876/helloworld' >> feeds.conf.default
+# 移除自带的旧包，防止名称冲突导致的不更新
+rm -rf package/lean/luci-app-passwall
+rm -rf package/feeds/luci/luci-app-passwall
 
-# 2. 如果你还想要更多插件（可选），可以添加这个常用库
-# echo 'src-git small https://github.com/kenzok8/small' >> feeds.conf.default
+# 添加 PassWall 官方源 (luci + packages)
+# 这样做能确保你在“服务”菜单里看到的永远是 xiaorouji 的最新版本
+sed -i '$a src-git passwall https://github.com/xiaorouji/openwrt-passwall.git;main' feeds.conf.default
+sed -i '$a src-git passwall_pkgs https://github.com/xiaorouji/openwrt-passwall-packages.git;main' feeds.conf.default
+
+# 提示：daed 的源也可以在这里一并处理
+rm -rf package/feeds/daed/luci-app-daed
