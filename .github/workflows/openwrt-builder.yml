@@ -77,19 +77,14 @@ jobs:
           [ -e files ] && mv files openwrt/files
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
           
-          # 执行 P2 脚本（这一步会物理修改内核模板）
           chmod +x $DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
           
-          # 关键：手动触发一次 feeds 安装，确保 daed 仓库里的 Makefile 被系统识别
+          # 【新增】强制重新安装一次 feeds，确保 Makefile 依赖刷新
           ./scripts/feeds install -a
           
-          # 再次强制写入，双重保险
-          echo "CONFIG_PACKAGE_luci-app-daed=y" >> .config
-          echo "CONFIG_DEBUG_INFO_BTF=y" >> .config
-          
-          # 刷新配置
+          # 刷新配置，此时因为内核模板已改，daed 会被保留
           make defconfig
           
       - name: Download package
