@@ -77,19 +77,22 @@ jobs:
           [ -e files ] && mv files openwrt/files
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
           
-          # 【增强】强制注入 eBPF 核心内核配置 (防止被 diy 脚本覆盖)
-          sed -i 's/CONFIG_DEBUG_INFO_BTF is not set/CONFIG_DEBUG_INFO_BTF=y/g' openwrt/.config
-          echo "CONFIG_DEBUG_INFO_BTF=y" >> openwrt/.config
-          echo "CONFIG_BPF=y" >> openwrt/.config
-          echo "CONFIG_BPF_SYSCALL=y" >> openwrt/.config
-          echo "CONFIG_BPF_JIT=y" >> openwrt/.config
-          echo "CONFIG_CGROUP_BPF=y" >> openwrt/.config
-          echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
-          
+          # 执行你的 P2 脚本（确保里面有修改内核模板 config-6.12 的命令）
           chmod +x $DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
-
+          
+          # 【最重要的一步】手动执行一遍同步并强制注入
+          ./scripts/feeds install -a
+          
+          # 强行把被剔除的 daed 重新写回 .config
+          echo "CONFIG_PACKAGE_daed=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-daed=y" >> .config
+          echo "CONFIG_PACKAGE_luci-i18n-daed-zh-cn=y" >> .config
+          
+          # 再次执行 defconfig 确保所有依赖（如 kmod-veth）被自动选中
+          make defconfig
+          
       - name: Download package
         id: package
         run: |
