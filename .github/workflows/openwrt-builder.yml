@@ -1,4 +1,4 @@
-name: OpenWrt Builder Optimized for daed
+name: ImmortalWrt Builder for daed
 
 on:
   repository_dispatch:
@@ -11,17 +11,11 @@ env:
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
-  UPLOAD_BIN_DIR: false
-  UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,41 +24,20 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /etc/mysql /etc/php
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo -E apt-get -qq update
-          # 【关键】安装 clang, lld, libbpf-dev 以支持 daed eBPF 编译
-          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev clang lld libbpf-dev
-          sudo -E apt-get -qq autoremove --purge
-          sudo -E apt-get -qq clean
+          # ImmortalWrt 编译 daed 必须的基础依赖
+          sudo -E apt-get -qq install build-essential clang llvm lld libelf-dev libbpf-dev zlib1g-dev libcap-dev
+          sudo -E apt-get -qq install $(curl -fsSL https://is.gd/depends_ubuntu_2204)
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
 
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false
-
       - name: Clone source code
         working-directory: /workdir
         run: |
-          df -hT $PWD
           git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
           ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-
-      - name: Load custom feeds
-        run: |
-          [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
-          # 删掉这里的手动 echo，全部写进下面的 diy-part1.sh 里
-          chmod +x $DIY_P1_SH
-          cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P1_SH
 
       - name: Update & Install feeds
         run: |
@@ -74,77 +47,24 @@ jobs:
 
       - name: Load custom configuration
         run: |
-          [ -e files ] && mv files openwrt/files
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-          
           chmod +x $DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
-          
-          # 【新增】强制重新安装一次 feeds，确保 Makefile 依赖刷新
-          ./scripts/feeds install -a
-          
-          # 刷新配置，此时因为内核模板已改，daed 会被保留
+          # 强制注入 daed 及其依赖
+          echo "CONFIG_PACKAGE_luci-app-daed=y" >> .config
+          echo "CONFIG_PACKAGE_luci-i18n-daed-zh-cn=y" >> .config
+          # 确保内核 BTF 开启 (ImmortalWrt 默认通常已开启，这里做双重保险)
+          echo "CONFIG_DEBUG_INFO_BTF=y" >> .config
           make defconfig
-          
-      - name: Download package
-        id: package
-        run: |
-          cd openwrt
-          make defconfig
-          make download -j8
-          find dl -size -10k -exec rm -f {} \;
-          make download -j$(nproc)
 
       - name: Compile the firmware
-        id: compile
         run: |
           cd openwrt
-          echo -e "$(nproc) thread compile"
-          # 先单独安装核心工具，确保 eBPF 交叉编译链就绪
-          make tools/install -j$(nproc) || make tools/install -j1 V=s
-          make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
-          # 全量编译
           make -j$(nproc) || make -j1 V=s
-          
-          if [ -n "$(find bin/targets/ -type f -name "*.img*" -o -name "*.vmdk*")" ]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-          else
-            echo "Compile Failed" && exit 1
-          fi
-          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-      - name: Organize files
-        id: organize
-        if: steps.compile.outputs.status == 'success' && !cancelled()
-        run: |
-          cd openwrt/bin/targets/x86/64
-          # 保留 daed 的 ipk 文件以便万一固件内没有时手动安装
-          echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: Upload firmware directory
+      - name: Upload firmware
         uses: actions/upload-artifact@v4
-        if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
-          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-          path: ${{ env.FIRMWARE }}
-
-      - name: Generate release tag
-        id: tag
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-        run: |
-          echo "release_tag=Lede_$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: Upload firmware to release
-        uses: softprops/action-gh-release@v2
-        if: steps.tag.outputs.status == 'success' && !cancelled()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
-          body: "🚀 i7-5500U eBPF Enhanced Firmware (daed + PassWall)"
-          files: ${{ env.FIRMWARE }}/*
+          name: ImmortalWrt_daed_i7-5500U
+          path: openwrt/bin/targets/x86/64/
