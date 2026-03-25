@@ -90,6 +90,7 @@ jobs:
         run: |
           cd openwrt
           ./scripts/feeds update -a
+          rm -rf feeds/small/trojan-plus
           ./scripts/feeds install -a
       
       - name: Load custom configuration
