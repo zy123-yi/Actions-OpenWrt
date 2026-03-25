@@ -1,27 +1,13 @@
 #!/bin/bash
+TARGET_FILE="openwrt/feeds.conf.default"
 
-# 1. 智能定位文件
-if [ -f "feeds.conf.default" ]; then
-    TARGET_FILE="feeds.conf.default"
-elif [ -f "openwrt/feeds.conf.default" ]; then
-    TARGET_FILE="openwrt/feeds.conf.default"
-else
-    echo "ERROR: Cannot find feeds.conf.default!"
-    exit 1
-fi
+# 1. 覆盖写入官方 25.12.1 分支源
+echo "src-git packages https://github.com/openwrt/packages.git;v25.12.1" > $TARGET_FILE
+echo "src-git luci https://github.com/openwrt/luci.git;v25.12.1" >> $TARGET_FILE
+echo "src-git routing https://github.com/openwrt/routing.git;v25.12.1" >> $TARGET_FILE
+echo "src-git telephony https://github.com/openwrt/telephony.git;v25.12.1" >> $TARGET_FILE
 
-# 2. 确保分支变量有效
-BRANCH=${REPO_BRANCH:-openwrt-25.12}
-
-# 3. 覆盖写入官方源（解决 Duplicate 报错）
-echo "src-git packages https://github.com/openwrt/packages.git;$BRANCH" > $TARGET_FILE
-echo "src-git luci https://github.com/openwrt/luci.git;$BRANCH" >> $TARGET_FILE
-echo "src-git routing https://github.com/openwrt/routing.git;$BRANCH" >> $TARGET_FILE
-echo "src-git telephony https://github.com/openwrt/telephony.git;$BRANCH" >> $TARGET_FILE
-
-# 4. 添加第三方源（这是关键！）
-# 保留 small 源以获取 PassWall 界面
+# 2. 只添加一个第三方源（建议用 small，它对 PassWall 的维护最快）
+# 不要同时加 sbwml 和 small，否则会因为重复定义导致 feeds 报错
 echo 'src-git small https://github.com/kenzok8/small' >> $TARGET_FILE
-
-
-echo "Success: $TARGET_FILE updated with branch $BRANCH"
+echo 'src-git mosdns https://github.com/sbwml/luci-app-mosdns' >> $TARGET_FILE
