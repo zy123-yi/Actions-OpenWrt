@@ -1,16 +1,16 @@
 #!/bin/bash
-#!/bin/bash
+# 强制定义版本号，欺骗 apk 软件源指向稳定版路径
+# 假设 $REPO_BRANCH 是 openwrt-25.12
+VERSION_VAL="25.12.0"
 
-# 1. 强制修改版本号显示（把 SNAPSHOT 替换为具体的版本）
-# 这里的 $REPO_BRANCH 会被替换为 openwrt-25.12
-# 我们提取出 25.12 部分
-VERSION_NUM=$(echo $REPO_BRANCH | cut -d '-' -f 2)
+# 修改版本号
+sed -i "s/VERSION_NUMBER:=.*/VERSION_NUMBER:=${VERSION_VAL}/g" include/version.mk
+# 修改内部代号
+sed -i "s/VERSION_CODE:=.*/VERSION_CODE:=$(date +%Y%m%d)/g" include/version.mk
 
-sed -i "s/VERSION_NUMBER:=.*/VERSION_NUMBER:=${VERSION_NUM}.0/g" include/version.mk
-sed -i "s/VERSION_CODE:=.*/VERSION_CODE:=Stable/g" include/version.mk
-
-# 2. 修改发布描述，显示在 Web 登录界面
-sed -i "s/DISTRIB_DESCRIPTION='.*'/DISTRIB_DESCRIPTION='OpenWrt ${VERSION_NUM}.0 Stable'/g" package/base-files/files/etc/openwrt_release
+# 强制修改软件源 URL 逻辑（可选，但推荐）
+# 这会确保你的固件以后去 releases 路径下载插件，而不是 snapshots
+sed -i "s/snapshots/releases\/${VERSION_VAL}/g" package/base-files/image-config.in
 # 1. 从 feeds 源码中彻底删除会导致报错的 trojan 相关包
 rm -rf feeds/small/trojan-plus
 rm -rf feeds/small/luci-app-trojan-plus
