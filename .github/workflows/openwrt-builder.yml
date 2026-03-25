@@ -50,13 +50,22 @@ jobs:
           docker-images: true
           swap-storage: false
 
-      - name: Get latest release branch
+      - name: Get latest release tag
         run: |
-          # 探测最新稳定版
-          LATEST_BRANCH=$(curl -s https://api.github.com/repos/openwrt/openwrt/branches | jq -r '.[].name' | grep -E '^openwrt-[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
-          echo "Detected branch: $LATEST_BRANCH"
-          # 关键：写入环境变量
-          echo "REPO_BRANCH=$LATEST_BRANCH" >> $GITHUB_ENV
+          # 1. 抓取最新的稳定版 Tag (如 v25.12.3)
+          LATEST_TAG=$(curl -s https://api.github.com/repos/openwrt/openwrt/tags | jq -r '.[].name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          
+          # 2. 如果没找到 Tag，回退到分支名
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="openwrt-25.12"
+          fi
+          
+          # 3. 提取纯数字版本号 (把 v25.12.3 变成 25.12.3)
+          VERSION_NUMBER=$(echo $LATEST_TAG | sed 's/^v//')
+          
+          echo "Detected Release: $LATEST_TAG"
+          echo "REPO_BRANCH=$LATEST_TAG" >> $GITHUB_ENV
+          echo "VERSION_NUMBER=$VERSION_NUMBER" >> $GITHUB_ENV
         
       - name: Clone source code
         working-directory: /workdir
