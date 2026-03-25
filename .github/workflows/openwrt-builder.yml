@@ -6,7 +6,10 @@ on:
 
 env:
   REPO_URL: https://github.com/openwrt/openwrt
-  # REPO_BRANCH: openwrt-25.12  # 关键点：指定稳定版分支名
+  # 锁定标签名
+  REPO_BRANCH: v25.12.1
+  # 定义纯数字版本号，供脚本使用
+  VERSION_NUMBER: 25.12.1
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
@@ -50,29 +53,11 @@ jobs:
           docker-images: true
           swap-storage: false
 
-      - name: Get latest release tag
-        run: |
-          # 1. 抓取最新的稳定版 Tag (如 v25.12.3)
-          LATEST_TAG=$(curl -s https://api.github.com/repos/openwrt/openwrt/tags | jq -r '.[].name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
-          
-          # 2. 如果没找到 Tag，回退到分支名
-          if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="openwrt-25.12"
-          fi
-          
-          # 3. 提取纯数字版本号 (把 v25.12.3 变成 25.12.3)
-          VERSION_NUMBER=$(echo $LATEST_TAG | sed 's/^v//')
-          
-          echo "Detected Release: $LATEST_TAG"
-          echo "REPO_BRANCH=$LATEST_TAG" >> $GITHUB_ENV
-          echo "VERSION_NUMBER=$VERSION_NUMBER" >> $GITHUB_ENV
+      
         
       - name: Clone source code
-        working-directory: /workdir
         run: |
-          df -hT $PWD
           git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
-          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
           
       - name: Generate app token
         id: app-token
