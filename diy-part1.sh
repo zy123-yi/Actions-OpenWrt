@@ -1,27 +1,27 @@
 #!/bin/bash
-# 进入 openwrt 目录 (取决于你的 Workflow 路径)
-# cd openwrt
-# 1. 自动定位 feeds.conf.default 的位置
-# 如果当前目录下有这个文件就用当前的，如果没有就去子目录找
+
+# 1. 智能定位文件（不管你在根目录还是 openwrt 目录）
 if [ -f "feeds.conf.default" ]; then
     TARGET_FILE="feeds.conf.default"
 elif [ -f "openwrt/feeds.conf.default" ]; then
     TARGET_FILE="openwrt/feeds.conf.default"
 else
-    echo "错误：找不到 feeds.conf.default 文件！"
+    echo "ERROR: Cannot find feeds.conf.default!"
     exit 1
 fi
 
-# 2. 使用 > 覆盖写入（清空原有内容），确保官方源版本对齐
-# 注意：$REPO_BRANCH 变量需要从 .yml 传递过来
-# 1. 使用 > 覆盖写入第一行，彻底清空原文件并定义官方 packages 分支
-echo "src-git packages https://github.com/openwrt/packages.git;$REPO_BRANCH" > feeds.conf.default
+# 2. 确保分支变量有效（如果探测失败则回退）
+BRANCH=${REPO_BRANCH:-openwrt-25.12}
 
-# 2. 使用 >> 追加后续行
-echo "src-git luci https://github.com/openwrt/luci.git;$REPO_BRANCH" >> feeds.conf.default
-echo "src-git routing https://github.com/openwrt/routing.git;$REPO_BRANCH" >> feeds.conf.default
-echo "src-git telephony https://github.com/openwrt/telephony.git;$REPO_BRANCH" >> feeds.conf.default
-# echo 'src-git passwall_luci https://github.com/xiaorouji/openwrt-passwall' >> feeds.conf.default
-# echo 'src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages' >> feeds.conf.default
-# echo 'src-git helloworld https://github.com/fw876/helloworld.git' >> feeds.conf.default
-echo 'src-git small https://github.com/kenzok8/small' >> openwrt/feeds.conf.default
+# 3. 覆盖写入官方源（解决 Duplicate 报错）
+echo "src-git packages https://github.com/openwrt/packages.git;$BRANCH" > $TARGET_FILE
+echo "src-git luci https://github.com/openwrt/luci.git;$BRANCH" >> $TARGET_FILE
+echo "src-git routing https://github.com/openwrt/routing.git;$BRANCH" >> $TARGET_FILE
+echo "src-git telephony https://github.com/openwrt/telephony.git;$BRANCH" >> $TARGET_FILE
+
+# 4. 添加第三方源（sbwml 源在 25.12 下比 small 更稳）
+# echo 'src-git sbwml https://github.com/sbwml/openwrt_pkgs' >> $TARGET_FILE
+# 如果你一定要用 small，取消下面这行的注释
+echo 'src-git small https://github.com/kenzok8/small' >> $TARGET_FILE
+
+echo "Success: $TARGET_FILE updated with branch $BRANCH"
