@@ -1,5 +1,6 @@
 #!/bin/bash
 # Add third-party feeds
+sed -i '/src-git packages/d' feeds.conf.default
 echo 'src-git packages https://github.com/openwrt/packages.git;$REPO_BRANCH' > feeds.conf.default
 echo 'src-git luci https://github.com/openwrt/luci.git;$REPO_BRANCH' >> feeds.conf.default
 # 使用 >> 表示将内容追加到文件末尾
