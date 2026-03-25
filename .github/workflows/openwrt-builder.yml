@@ -84,48 +84,22 @@ jobs:
         run: |
           cd openwrt
           ./scripts/feeds update -a
-          
-          # 删除第三方源中不兼容 25.12 APK 模式的“钉子户”
-          # 这些功能官方 packages 里都有，删掉后系统会自动用官方适配好的版本
-          rm -rf feeds/small/luci-app-adguardhome
-          rm -rf feeds/small/luci-app-zerotier
-          rm -rf feeds/small/luci-app-cpufreq
-          rm -rf feeds/small/luci-app-upnp
-          rm -rf feeds/small/luci-app-wol
-          rm -rf feeds/small/luci-app-vlmcsd
-          rm -rf feeds/small/trojan-plus
-          rm -rf feeds/small/mosdns
-          
           ./scripts/feeds install -a
-      
+
       - name: Load custom configuration
         run: |
-          [ -e files ] && mv files openwrt/files
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-          
-          # 防止旧的依赖残留导致编译崩溃
+          chmod +x $DIY_P2_SH
           cd openwrt
-          make defconfig
-          # 强制更新所有包的 Makefile 时间戳，防止编译时跳过关键步骤
-          touch package/libs/openssl/Makefile 
-          
-          chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+          # 执行 diy-part2.sh 来克隆 sbwml 的包
           $GITHUB_WORKSPACE/$DIY_P2_SH
-          
+
       - name: Download package
         id: package
         run: |
           cd openwrt
           make defconfig
-          
-          # 【关键修复】清理之前的坏包记录
-          rm -rf dl/erofs-utils-*.tar.gz
-          rm -rf build_dir/host/erofs-utils-*
-          
           make download -j8
-          # 强化清理：删除 404 网页或坏包（小于 10KB）
-          find dl -size -10k -exec rm -f {} \;
-          make download -j$(nproc)
           
       - name: Compile the firmware
         id: compile
