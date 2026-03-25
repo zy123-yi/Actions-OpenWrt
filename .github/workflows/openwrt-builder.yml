@@ -6,7 +6,7 @@ on:
 
 env:
   REPO_URL: https://github.com/openwrt/openwrt
-  REPO_BRANCH: openwrt-25.12  # 关键点：指定稳定版分支名
+  # REPO_BRANCH: openwrt-25.12  # 关键点：指定稳定版分支名
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
@@ -50,6 +50,14 @@ jobs:
           docker-images: true
           swap-storage: false
 
+      - name: Get latest release branch
+        run: |
+          # 访问 GitHub API 获取所有分支，过滤出 openwrt-xx.xx 格式，取最新的一个
+          LATEST_BRANCH=$(curl -s https://api.github.com/repos/openwrt/openwrt/branches | jq -r '.[].name' | grep -E '^openwrt-[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          echo "Detected latest stable branch: $LATEST_BRANCH"
+          # 将结果写入环境变量，覆盖 env 中的 REPO_BRANCH
+          echo "REPO_BRANCH=$LATEST_BRANCH" >> $GITHUB_ENV
+        
       - name: Clone source code
         working-directory: /workdir
         run: |
