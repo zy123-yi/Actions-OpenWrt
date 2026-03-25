@@ -52,10 +52,10 @@ jobs:
 
       - name: Get latest release branch
         run: |
-          # 访问 GitHub API 获取所有分支，过滤出 openwrt-xx.xx 格式，取最新的一个
+          # 探测最新稳定版
           LATEST_BRANCH=$(curl -s https://api.github.com/repos/openwrt/openwrt/branches | jq -r '.[].name' | grep -E '^openwrt-[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
-          echo "Detected latest stable branch: $LATEST_BRANCH"
-          # 将结果写入环境变量，覆盖 env 中的 REPO_BRANCH
+          echo "Detected branch: $LATEST_BRANCH"
+          # 关键：写入环境变量
           echo "REPO_BRANCH=$LATEST_BRANCH" >> $GITHUB_ENV
         
       - name: Clone source code
