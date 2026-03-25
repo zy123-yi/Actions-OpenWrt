@@ -77,11 +77,14 @@ jobs:
           git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf https://github.com/
       
       - name: Load custom feeds
+        env:
+          # 这一步极其重要，否则脚本拿不到探测出来的分支名
+          REPO_BRANCH: ${{ env.REPO_BRANCH }}
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
           chmod +x $DIY_P1_SH
-          cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P1_SH
+          # 保持在根目录执行，让脚本内部的 if/elif 逻辑去处理路径
+          ./$DIY_P1_SH
       
       - name: Update & Install feeds
         run: |
@@ -94,11 +97,13 @@ jobs:
           [ -e files ] && mv files openwrt/files
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
           
-          # 【补丁】注入 OpenSSL 修复逻辑，防止 e_devcrypto.o 报错
-          echo "OPENSSL_OPTIONS += no-devcrypto no-afalgeng" >> openwrt/package/libs/openssl/Makefile
-          
-          chmod +x $DIY_P2_SH
+          # 防止旧的依赖残留导致编译崩溃
           cd openwrt
+          make defconfig
+          # 强制更新所有包的 Makefile 时间戳，防止编译时跳过关键步骤
+          touch package/libs/openssl/Makefile 
+          
+          chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
           $GITHUB_WORKSPACE/$DIY_P2_SH
           
       - name: Download package
