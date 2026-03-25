@@ -23,5 +23,5 @@ echo "src-git telephony https://github.com/openwrt/telephony.git;$BRANCH" >> $TA
 # echo 'src-git sbwml https://github.com/sbwml/openwrt_pkgs' >> $TARGET_FILE
 # 如果你一定要用 small，取消下面这行的注释
 echo 'src-git small https://github.com/kenzok8/small' >> $TARGET_FILE
-echo 'src-git mosdns https://github.com/sbwml/luci-app-mosdns' >> $TARGET_FILE
+# echo 'src-git mosdns https://github.com/sbwml/luci-app-mosdns' >> $TARGET_FILE
 echo "Success: $TARGET_FILE updated with branch $BRANCH"
