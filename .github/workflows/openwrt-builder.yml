@@ -67,6 +67,7 @@ jobs:
       - name: Setup credentials
         run: |
           git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf https://github.com/
+      
       - name: Load custom feeds
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
@@ -84,8 +85,6 @@ jobs:
         run: |
           [ -e files ] && mv files openwrt/files
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-          
-          
           
           # 【补丁】注入 OpenSSL 修复逻辑，防止 e_devcrypto.o 报错
           echo "OPENSSL_OPTIONS += no-devcrypto no-afalgeng" >> openwrt/package/libs/openssl/Makefile
