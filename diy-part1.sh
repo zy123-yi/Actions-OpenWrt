@@ -23,8 +23,5 @@ echo "src-git telephony https://github.com/openwrt/telephony.git;$BRANCH" >> $TA
 # 保留 small 源以获取 PassWall 界面
 echo 'src-git small https://github.com/kenzok8/small' >> $TARGET_FILE
 
-# 必须引入 sbwml 源，因为它提供了适配 25.12 APK 模式的核心依赖包（Xray, Sing-box, MosDNS）
-# 即使你不用他的插件，你也需要他的“核心包”来顶替 small 里报错的那些
-echo 'src-git sbwml https://github.com/sbwml/openwrt_pkgs' >> $TARGET_FILE
 
 echo "Success: $TARGET_FILE updated with branch $BRANCH"
