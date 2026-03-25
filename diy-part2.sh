@@ -1,30 +1,17 @@
 #!/bin/bash
-# 假设在 openwrt 目录执行
-VERSION_VAL="25.12.1"
 
-# 1. 强制修改版本定义
-sed -i "s/VERSION_NUMBER:=.*/VERSION_NUMBER:=${VERSION_VAL}/g" include/version.mk
-sed -i "s/VERSION_CODE:=.*/VERSION_CODE:=Stable/g" include/version.mk
+# 1. 进入 package 目录准备拉取
+mkdir -p package/community
+cd package/community
 
-# 2. 修改 Web 界面显示
-sed -i "s/DISTRIB_DESCRIPTION='.*'/DISTRIB_DESCRIPTION='OpenWrt ${VERSION_VAL} Stable by Gemini'/g" package/base-files/files/etc/openwrt_release
+# 2. 拉取 sbwml 维护的插件合集 (这个源在 25.12 下非常稳)
+# 它包含了：PassWall, MosDNS, AdGuardHome, Daed 等
+git clone --depth 1 https://github.com/sbwml/openwrt_pkgs openwrt_pkgs
 
+# 3. 回到主目录
+cd ../..
 
-
-# 3. 勾选官方中文主支持
-echo "CONFIG_LUCI_LANG_zh_Hans=y" >> .config
-
-# 4. 自动补全汉化包（同时尝试两种命名格式）
-# 逻辑：只要勾选了 luci-app-xxx，就尝试勾选其对应的 zh-Hans 和 zh-cn
-grep "^CONFIG_PACKAGE_luci-app-" .config | grep "=y" | while read line; do
-    pkg=$(echo $line | sed 's/CONFIG_PACKAGE_//;s/=y//')
-    app_name=$(echo $pkg | sed 's/luci-app-//')
-    
-    # 尝试注入 zh-Hans (官方标准)
-    echo "CONFIG_PACKAGE_luci-i18n-$app_name-zh-Hans=y" >> .config
-    # 尝试注入 zh-cn (第三方源常用)
-    echo "CONFIG_PACKAGE_luci-i18n-$app_name-zh-cn=y" >> .config
-done
-
-# 5. 针对 mosdns 的专项强制勾选
+# 4. 汉化补丁：确保简体中文包被选中
+# 针对 25.12.1 的 zh-Hans 标准
+echo "CONFIG_PACKAGE_luci-i18n-passwall-zh-Hans=y" >> .config
 echo "CONFIG_PACKAGE_luci-i18n-mosdns-zh-cn=y" >> .config
