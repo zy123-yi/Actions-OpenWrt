@@ -15,3 +15,9 @@ git clone --depth 1 https://github.com/sbwml/v2dat.git v2dat
 
 # 4. 返回主目录
 cd ../..
+# 在 diy-part2.sh 的末尾添加
+echo "CONFIG_PACKAGE_luci-app-passwall=y" >> .config
+echo "CONFIG_PACKAGE_luci-app-mosdns=y" >> .config
+# 自动选中所有依赖项（很重要！）
+echo "CONFIG_PACKAGE_luci-i18n-passwall-zh-Hans=y" >> .config
+echo "CONFIG_PACKAGE_luci-i18n-mosdns-zh-cn=y" >> .config
