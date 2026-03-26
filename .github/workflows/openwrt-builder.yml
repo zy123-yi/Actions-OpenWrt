@@ -86,13 +86,16 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Load custom configuration
+      - name: Load custom configuration & Run DIY-Part2
         run: |
+          # 1. 如果有预设的 .config，先移动进去
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+          # 2. 给脚本权限并执行（这里会去克隆 PassWall 和 MosDNS）
           chmod +x $DIY_P2_SH
           cd openwrt
-          # 执行 diy-part2.sh 来克隆 sbwml 的包
           $GITHUB_WORKSPACE/$DIY_P2_SH
+          # 3. 核心：让 OpenWrt 强制刷新目录索引，识别新克隆的插件
+          make defconfig
 
       - name: Download package
         id: package
