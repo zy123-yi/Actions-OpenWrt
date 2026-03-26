@@ -15,8 +15,8 @@ cd ../..
 echo "CONFIG_PACKAGE_luci-app-passwall=y" >> .config
 echo "CONFIG_PACKAGE_luci-app-mosdns=y" >> .config
 # 自动选中所有依赖项（很重要！）
-echo "CONFIG_PACKAGE_luci-i18n-passwall-zh-Hans=y" >> .config
-echo "CONFIG_PACKAGE_luci-i18n-mosdns-zh-cn=y" >> .config
+# echo "CONFIG_PACKAGE_luci-i18n-passwall-zh-Hans=y" >> .config
+# echo "CONFIG_PACKAGE_luci-i18n-mosdns-zh-cn=y" >> .config
 #!/bin/bash
 
 #!/bin/bash
