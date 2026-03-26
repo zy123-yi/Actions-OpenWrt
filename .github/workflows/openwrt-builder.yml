@@ -86,15 +86,23 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Load custom configuration & Run DIY-Part2
+      - name: Load custom configuration
         run: |
-          # 1. 如果有预设的 .config，先移动进去
+          # 先把仓库里的初始配置放进去
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-          # 2. 给脚本权限并执行（这里会去克隆 PassWall 和 MosDNS）
+
+      - name: Run DIY-Part2 (Modify .config)
+        run: |
           chmod +x $DIY_P2_SH
           cd openwrt
+          # 这里会执行克隆并追加配置到 .config
           $GITHUB_WORKSPACE/$DIY_P2_SH
-          # 3. 核心：让 OpenWrt 强制刷新目录索引，识别新克隆的插件
+
+      - name: Expand dependencies
+        run: |
+          cd openwrt
+          # 这一步是灵魂：它会检查 .config，发现你选了 passwall，
+          # 然后自动把 passwall 依赖的 xray, chinadns 等也勾选上，而不改动你原本的设置。
           make defconfig
 
       - name: Download package
