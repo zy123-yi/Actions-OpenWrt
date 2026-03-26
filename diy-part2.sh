@@ -19,16 +19,29 @@ echo "CONFIG_PACKAGE_luci-i18n-passwall-zh-Hans=y" >> .config
 echo "CONFIG_PACKAGE_luci-i18n-mosdns-zh-cn=y" >> .config
 #!/bin/bash
 
-# 1. 强制物理删除所有可能的 Trojan 路径
-# 无论是 feeds 还是 package 目录下的全部干掉
-rm -rf feeds/small/trojan-plus
-rm -rf feeds/small/luci-app-trojan-plus
-rm -rf package/community/jell/trojan-plus
-rm -rf package/feeds/small/trojan-plus
+#!/bin/bash
 
-# 2. 这里的 find 命令是保底手段：全盘搜索名为 trojan-plus 的文件夹并删除
+# 1. 彻底切除 Trojan 相关（解决 Boost 1.89 报错的罪魁祸首）
 find ./ -name "trojan-plus" -type d -exec rm -rf {} +
+find ./ -name "luci-app-trojan-plus" -type d -exec rm -rf {} +
+find ./ -name "trojan-go" -type d -exec rm -rf {} +
 
-# 3. 再次强力修改 .config，确保没有任何插件能通过 select 把它拉回来
-sed -i '/CONFIG_PACKAGE_trojan-plus/d' .config
+# 2. 彻底切除 daed 相关（既然你不需要了）
+find ./ -name "daed" -type d -exec rm -rf {} +
+find ./ -name "luci-app-daed" -type d -exec rm -rf {} +
+
+# 3. 彻底切除 AdGuardHome 相关（防止 Go 语言环境冲突）
+find ./ -name "luci-app-adguardhome" -type d -exec rm -rf {} +
+find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
+
+# 4. 解决 25.12 稳定版核心冲突
+# 删掉 small 源中不兼容 APK 模式的旧核心，强制系统使用 sbwml 源中修复过的版本
+# rm -rf feeds/small/sing-box
+# rm -rf feeds/small/xray-core
+# rm -rf feeds/small/v2ray-core
+# rm -rf feeds/small/v2ray-plugin
+
+# 5. 在 .config 中强制禁用这些项目（双重保险）
+sed -i '/CONFIG_PACKAGE_luci-app-adguardhome/d' .config
+sed -i '/CONFIG_PACKAGE_luci-app-daed/d' .config
 sed -i '/CONFIG_PACKAGE_luci-app-trojan-plus/d' .config
