@@ -6,7 +6,7 @@ cd package/community
 
 # 2. 拉取 sbwml 维护的插件合集 (这个源在 25.12 下非常稳)
 # 它包含了：PassWall, MosDNS, AdGuardHome, Daed 等
-git clone --depth 1 https://github.com/sbwml/openwrt_pkgs openwrt_pkgs
+git clone --recursive --depth 1 https://github.com/sbwml/openwrt_pkgs openwrt_pkgs
 
 # 3. 回到主目录
 cd ../..
