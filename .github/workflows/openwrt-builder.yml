@@ -7,9 +7,9 @@ on:
 env:
   REPO_URL: https://github.com/openwrt/openwrt
   # 锁定标签名
-  REPO_BRANCH: v25.12.1
+  REPO_BRANCH: v25.12.2
   # 定义纯数字版本号，供脚本使用
-  VERSION_NUMBER: 25.12.1
+  VERSION_NUMBER: 25.12.2
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
