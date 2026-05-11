@@ -7,7 +7,6 @@ cd package/community
 # 2. 拉取 PassWall 插件及依赖 (使用目前活跃的备份源)
 # 这个源通常包含了 luci-app-passwall 及其核心组件
 git clone --depth 1 https://github.com/kenzok8/jell.git
-git clone https://github.com/QiuSimons/luci-app-daed package/dae
 
 
 # 4. 返回主目录
