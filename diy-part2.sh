@@ -20,7 +20,7 @@ mkdir -p package/community
 # 4. 【定向精准拉取】从 jell 仓库只拿你要的“传统 PassWall”和“vlmcsd”
 # 使用这种方式可以保证拿到的包是之前编译成功的那个版本
 # git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git package/community/jell_temp
-git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git package/community
 # cd package/community/jell_temp
 # git sparse-checkout set luci-app-passwall vlmcsd luci-app-vlmcsd
 cd ../../..
