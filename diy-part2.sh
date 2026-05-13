@@ -6,8 +6,20 @@ cd package/community
 
 # 2. 拉取 PassWall 插件及依赖 (使用目前活跃的备份源)
 # 这个源通常包含了 luci-app-passwall 及其核心组件
-# git clone --depth 1 https://github.com/kenzok8/small-package.git
-git clone --depth 1 https://github.com/kenzok8/jell.git
+git clone --depth 1 https://github.com/kenzok8/small-package.git
+# git clone --depth 1 https://github.com/kenzok8/jell.git
+
+# 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
+# 假设你的目录名是 package/small-package
+rm -rf package/communitye/vlmcsd
+rm -rf package/communitye/luci-app-vlmcsd
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git package/vlmcsd_temp
+cd package/vlmcsd_temp
+git sparse-checkout set vlmcsd luci-app-vlmcsd
+cd ../..
+cp -r package/vlmcsd_temp/vlmcsd package/community
+cp -r package/vlmcsd_temp/luci-app-vlmcsd package/luci-app-vlmcsd
+rm -rf package/vlmcsd_temp
 
 # 4. 返回主目录
 cd ../..
