@@ -80,4 +80,23 @@ ln -sf ./small/* ../
 cd ../..
 ./scripts/feeds update -i
 ./scripts/feeds install -a
+# --- 1. 物理删除所有已知的 Rust 插件目录 ---
+# 这些是 small-package 和官方源中最常见的 Rust 项目
+find ./package/ -name "dae" -type d -exec rm -rf {} +
+find ./package/ -name "daed" -type d -exec rm -rf {} +
+find ./package/ -name "luci-app-dae" -type d -exec rm -rf {} +
+find ./package/ -name "luci-app-daed" -type d -exec rm -rf {} +
+
+# --- 2. 强制禁用编译环境中的 Rust 支持 ---
+# 在 .config 中明确关闭 Rust 编译器，防止它因为依赖被误拉取
+sed -i '/CONFIG_PACKAGE_librust/d' .config
+sed -i '/CONFIG_PACKAGE_rust/d' .config
+echo "# CONFIG_PACKAGE_rust is not set" >> .config
+echo "# CONFIG_PACKAGE_librust is not set" >> .config
+
+# --- 3. 针对 PassWall 的调整 ---
+# 确保不勾选任何可能触发 Rust 依赖的后端（比如 dae 模式）
+sed -i '/CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy/s/is not set/y/g' .config
+sed -i '/CONFIG_PACKAGE_luci-app-passwall_dae/d' .config
+echo "# CONFIG_PACKAGE_luci-app-passwall_dae is not set" >> .config
 make defconfig
