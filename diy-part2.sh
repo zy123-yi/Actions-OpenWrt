@@ -24,8 +24,8 @@ mv jell_temp/vlmcsd ./
 mv jell_temp/luci-app-vlmcsd ./
 rm -rf jell_temp
 
-find ./package/community -name "trojan*" -type d -exec rm -rf {} +
-find ./package/community -name "daed*" -type d -exec rm -rf {} +
+# find ./package/community -name "trojan*" -type d -exec rm -rf {} +
+# find ./package/community -name "daed*" -type d -exec rm -rf {} +
 
 # 4. 【关键：解决固件 20M 的必杀技】
 # 将所有插件“提拔”到 package/ 根目录下，确保编译系统能识别
@@ -36,17 +36,48 @@ ln -sf ./package/community/luci-app-vlmcsd ./package/
 
 # 5. 再次修正 .config 写入 (使用更通用的包名)
 # 之前的 20M 是因为配置没被识别，这次我们要写得更死一点
-cat >> .config <<EOF
-CONFIG_PACKAGE_luci-app-passwall=y
-CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y
-CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y
-CONFIG_PACKAGE_luci-app-mosdns=y
-CONFIG_PACKAGE_luci-app-xl2tpd=y
-CONFIG_PACKAGE_xl2tpd=y
-CONFIG_PACKAGE_luci-proto-ppp=y
-CONFIG_PACKAGE_luci-app-ipsec-vpnd=y
-EOF
+
 
 # 6. 强制执行依赖刷新
 # 如果这一步报错，说明包的源码没放对位置
+# --- 1. 深度清理 small-package 中的故障/过时插件 ---
+
+# 报错的 shadowsocks-libev 及其相关插件
+rm -rf package/community/small/shadowsocks-libev
+rm -rf package/community/small/shadowsocksr-libev
+rm -rf package/community/small/luci-app-shadowsocks-libev
+
+# 之前提到过的容易报错的项（双重保险）
+rm -rf package/community/small/opkg
+rm -rf package/community/small/daed
+rm -rf package/community/small/adguardhome
+
+# 清理 Trojan 相关（高概率导致 Boost 库编译错误）
+rm -rf package/community/small/trojan
+rm -rf package/community/small/trojan-plus
+rm -rf package/community/small/luci-app-trojan-plus
+
+# --- 2. 修正 PassWall 的依赖模式 ---
+# 既然删除了 shadowsocks-libev，我们要确保 PassWall 不去强行依赖它
+# 在写入 .config 时，我们只选核心的 Xray 和 Sing-box
+
+cat >> .config <<EOF
+CONFIG_PACKAGE_luci-app-passwall=y
+CONFIG_PACKAGE_luci-app-passwall_Transparent_Proxy=y
+CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y
+CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y
+
+# 强制使用 Xray 作为后端，跳过 libev 相关的旧组件
+CONFIG_PACKAGE_passwall_xray-core=y
+CONFIG_PACKAGE_passwall_sing-box=y
+CONFIG_node_v8_arch_x64=y
+EOF
+
+# --- 3. 再次执行链接和索引刷新 ---
+# 确保剩余的好包被系统识别
+cd package/community
+ln -sf ./small/* ../
+cd ../..
+./scripts/feeds update -i
+./scripts/feeds install -a
 make defconfig
