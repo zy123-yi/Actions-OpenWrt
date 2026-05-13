@@ -36,18 +36,18 @@ cd ../../..
 ./scripts/feeds install -a
 
 # 6. 配置写入 (针对传统 PassWall)
-cat >> .config <<EOF
-CONFIG_PACKAGE_luci-app-passwall=y
-CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y
-CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y
+# cat >> .config <<EOF
+# CONFIG_PACKAGE_luci-app-passwall=y
+# CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y
+# CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y
 # 配合 MosDNS
-CONFIG_PACKAGE_luci-app-mosdns=y
+# CONFIG_PACKAGE_luci-app-mosdns=y
 # L2TP 插件
-CONFIG_PACKAGE_luci-app-xl2tpd=y
-CONFIG_PACKAGE_xl2tpd=y
-CONFIG_PACKAGE_luci-proto-ppp=y
-CONFIG_PACKAGE_luci-app-ipsec-vpnd=y
-EOF
+# CONFIG_PACKAGE_luci-app-xl2tpd=y
+# CONFIG_PACKAGE_xl2tpd=y
+# CONFIG_PACKAGE_luci-proto-ppp=y
+# CONFIG_PACKAGE_luci-app-ipsec-vpnd=y
+# EOF
 
 # 7. 自动补全所有依赖项
 make defconfig
