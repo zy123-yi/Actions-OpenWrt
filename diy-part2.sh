@@ -24,6 +24,9 @@ mv jell_temp/vlmcsd ./
 mv jell_temp/luci-app-vlmcsd ./
 rm -rf jell_temp
 
+find ./package/community -name "trojan*" -type d -exec rm -rf {} +
+find ./package/community -name "daed*" -type d -exec rm -rf {} +
+
 # 4. 【关键：解决固件 20M 的必杀技】
 # 将所有插件“提拔”到 package/ 根目录下，确保编译系统能识别
 cd ../..
