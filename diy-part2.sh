@@ -1,53 +1,71 @@
 #!/bin/bash
 
-# 1. 环境大扫除
-rm -rf tmp/
-rm -rf package/community
+# 1. 创建并进入社区插件目录
 mkdir -p package/community
+cd package/community
 
-# 2. 拉取 small-package (仅作为备用依赖库)
-# git clone --depth 1 https://github.com/kenzok8/small-package.git package/community/small
+# 2. 拉取 PassWall 插件及依赖 (使用目前活跃的备份源)
+# 这个源通常包含了 luci-app-passwall 及其核心组件
+# git clone --depth 1 https://github.com/kenzok8/small-package.git
+git clone --depth 1 https://github.com/kenzok8/jell.git
 
-# 3. 【关键步骤】删除 small 里的“多刺”插件
-# 删掉 small 里的 passwall, vlmcsd, shadowsocks 等所有容易报错的货
-# rm -rf package/community/small/luci-app-passwall
-# rm -rf package/community/small/passwall
-# rm -rf package/community/small/vlmcsd
-# rm -rf package/community/small/luci-app-vlmcsd
-# rm -rf package/community/small/shadowsocks*
-# rm -rf package/community/small/opkg
+# 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
+# 假设你的目录名是 package/small-package
+# rm -rf package/communitye/vlmcsd
+# rm -rf package/communitye/luci-app-vlmcsd
+# git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git package/vlmcsd_temp
+# cd package/vlmcsd_temp
+# git sparse-checkout set vlmcsd luci-app-vlmcsd
+# cd ../..
+#cp -r package/vlmcsd_temp/vlmcsd package/community
+# cp -r package/vlmcsd_temp/luci-app-vlmcsd package/luci-app-vlmcsd
+# rm -rf package/vlmcsd_temp
 
-# 4. 【定向精准拉取】从 jell 仓库只拿你要的“传统 PassWall”和“vlmcsd”
-# 使用这种方式可以保证拿到的包是之前编译成功的那个版本
-# git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git package/community/jell_temp
-git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git package/community
-# cd package/community/jell_temp
-# git sparse-checkout set luci-app-passwall vlmcsd luci-app-vlmcsd
-cd ../../..
+# 4. 返回主目录
+cd ../..
+# 在 diy-part2.sh 的末尾添加
+echo "CONFIG_PACKAGE_luci-app-passwall=y" >> .config
+echo "CONFIG_PACKAGE_luci-app-mosdns=y" >> .config
+# 自动选中所有依赖项（很重要！）
+# echo "CONFIG_PACKAGE_luci-i18n-passwall-zh-Hans=y" >> .config
+# echo "CONFIG_PACKAGE_luci-i18n-mosdns-zh-cn=y" >> .config
+#!/bin/bash
 
-# 把 jell 的好包搬出来，放到 package 根目录（优先级最高）
-# cp -r package/community/jell_temp/luci-app-passwall package/
-# cp -r package/community/jell_temp/vlmcsd package/
-# cp -r package/community/jell_temp/luci-app-vlmcsd package/
-# rm -rf package/community/jell_temp
+#!/bin/bash
 
-# 5. 刷新 feeds 并强制安装（确保依赖链条连通）
-./scripts/feeds update -a
-./scripts/feeds install -a
+# 1. 彻底切除 Trojan 相关（解决 Boost 1.89 报错的罪魁祸首）
+find ./ -name "trojan-plus" -type d -exec rm -rf {} +
+find ./ -name "luci-app-trojan-plus" -type d -exec rm -rf {} +
+find ./ -name "trojan-go" -type d -exec rm -rf {} +
 
-# 6. 配置写入 (针对传统 PassWall)
-# cat >> .config <<EOF
-# CONFIG_PACKAGE_luci-app-passwall=y
-# CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y
-# CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y
-# 配合 MosDNS
-# CONFIG_PACKAGE_luci-app-mosdns=y
-# L2TP 插件
-# CONFIG_PACKAGE_luci-app-xl2tpd=y
-# CONFIG_PACKAGE_xl2tpd=y
-# CONFIG_PACKAGE_luci-proto-ppp=y
-# CONFIG_PACKAGE_luci-app-ipsec-vpnd=y
-# EOF
+# 2. 彻底切除 daed 相关（既然你不需要了）
+find ./ -name "daed" -type d -exec rm -rf {} +
+find ./ -name "luci-app-daed" -type d -exec rm -rf {} +
 
-# 7. 自动补全所有依赖项
-make defconfig
+# 3. 彻底切除 AdGuardHome 相关（防止 Go 语言环境冲突）
+find ./ -name "luci-app-adguardhome" -type d -exec rm -rf {} +
+find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
+
+# 4. 解决 25.12 稳定版核心冲突
+# 删掉 small 源中不兼容 APK 模式的旧核心，强制系统使用 sbwml 源中修复过的版本
+# rm -rf feeds/small/sing-box
+# rm -rf feeds/small/xray-core
+# rm -rf feeds/small/v2ray-core
+# rm -rf feeds/small/v2ray-plugin
+
+# 5. 额外清理 Turbo ACC 冲突（防止 Duplicate 报错）
+rm -rf feeds/luci/applications/luci-app-turboacc
+rm -rf feeds/packages/net/vlmcsd
+
+# 5. 在 .config 中强制禁用这些项目（双重保险）
+sed -i '/CONFIG_PACKAGE_luci-app-adguardhome/d' .config
+sed -i '/CONFIG_PACKAGE_luci-app-daed/d' .config
+sed -i '/CONFIG_PACKAGE_luci-app-trojan-plus/d' .config
+# 在 diy-part2.sh 中追加配置
+echo "CONFIG_PACKAGE_luci-app-xl2tpd=y" >> .config
+echo "CONFIG_PACKAGE_luci-proto-ppp=y" >> .config
+echo "CONFIG_PACKAGE_xl2tpd=y" >> .config
+
+# 如果需要 IPsec 加密支持
+echo "CONFIG_PACKAGE_luci-app-ipsec-vpnd=y" >> .config
+
