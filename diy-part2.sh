@@ -11,6 +11,7 @@ cd package/community
 
 # 拉取 small-package (作为主干)
 git clone --depth 1 https://github.com/kenzok8/small-package.git small
+rm -rf small-package/opkg
 
 # 3. 处理 vlmcsd 冲突（这就是你之前报错的根源）
 # 删掉 small 里的坏包，直接把 jell 里的好包拉过来
