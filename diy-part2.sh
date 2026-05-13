@@ -1,102 +1,52 @@
 #!/bin/bash
 
-# 1. 清理环境，防止缓存了 jell 时代的路径
+# 1. 环境大扫除
 rm -rf tmp/
-# 彻底清理旧的 community 目录
 rm -rf package/community
-
-# 2. 创建目录并拉取源
 mkdir -p package/community
-cd package/community
 
-# 拉取 small-package (作为主干)
-git clone --depth 1 https://github.com/kenzok8/small-package.git small
-rm -rf small-package/opkg
+# 2. 拉取 small-package (仅作为备用依赖库)
+git clone --depth 1 https://github.com/kenzok8/small-package.git package/community/small
 
-# 3. 处理 vlmcsd 冲突（这就是你之前报错的根源）
-# 删掉 small 里的坏包，直接把 jell 里的好包拉过来
-rm -rf small/vlmcsd small/luci-app-vlmcsd
-git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git jell_temp
-cd jell_temp
-git sparse-checkout set vlmcsd luci-app-vlmcsd
-cd ..
-mv jell_temp/vlmcsd ./
-mv jell_temp/luci-app-vlmcsd ./
-rm -rf jell_temp
-
-# find ./package/community -name "trojan*" -type d -exec rm -rf {} +
-# find ./package/community -name "daed*" -type d -exec rm -rf {} +
-
-# 4. 【关键：解决固件 20M 的必杀技】
-# 将所有插件“提拔”到 package/ 根目录下，确保编译系统能识别
-cd ../..
-ln -sf ./package/community/small/* ./package/
-ln -sf ./package/community/vlmcsd ./package/
-ln -sf ./package/community/luci-app-vlmcsd ./package/
-
-# 5. 再次修正 .config 写入 (使用更通用的包名)
-# 之前的 20M 是因为配置没被识别，这次我们要写得更死一点
-
-
-# 6. 强制执行依赖刷新
-# 如果这一步报错，说明包的源码没放对位置
-# --- 1. 深度清理 small-package 中的故障/过时插件 ---
-
-# 报错的 shadowsocks-libev 及其相关插件
-rm -rf package/community/small/shadowsocks-libev
-rm -rf package/community/small/shadowsocksr-libev
-rm -rf package/community/small/luci-app-shadowsocks-libev
-
-# 之前提到过的容易报错的项（双重保险）
+# 3. 【关键步骤】删除 small 里的“多刺”插件
+# 删掉 small 里的 passwall, vlmcsd, shadowsocks 等所有容易报错的货
+rm -rf package/community/small/luci-app-passwall
+rm -rf package/community/small/passwall
+rm -rf package/community/small/vlmcsd
+rm -rf package/community/small/luci-app-vlmcsd
+rm -rf package/community/small/shadowsocks*
 rm -rf package/community/small/opkg
-rm -rf package/community/small/daed
-rm -rf package/community/small/adguardhome
 
-# 清理 Trojan 相关（高概率导致 Boost 库编译错误）
-rm -rf package/community/small/trojan
-rm -rf package/community/small/trojan-plus
-rm -rf package/community/small/luci-app-trojan-plus
+# 4. 【定向精准拉取】从 jell 仓库只拿你要的“传统 PassWall”和“vlmcsd”
+# 使用这种方式可以保证拿到的包是之前编译成功的那个版本
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git package/community/jell_temp
+cd package/community/jell_temp
+git sparse-checkout set luci-app-passwall vlmcsd luci-app-vlmcsd
+cd ../../..
 
-# --- 2. 修正 PassWall 的依赖模式 ---
-# 既然删除了 shadowsocks-libev，我们要确保 PassWall 不去强行依赖它
-# 在写入 .config 时，我们只选核心的 Xray 和 Sing-box
+# 把 jell 的好包搬出来，放到 package 根目录（优先级最高）
+cp -r package/community/jell_temp/luci-app-passwall package/
+cp -r package/community/jell_temp/vlmcsd package/
+cp -r package/community/jell_temp/luci-app-vlmcsd package/
+rm -rf package/community/jell_temp
 
+# 5. 刷新 feeds 并强制安装（确保依赖链条连通）
+./scripts/feeds update -a
+./scripts/feeds install -a
+
+# 6. 配置写入 (针对传统 PassWall)
 cat >> .config <<EOF
 CONFIG_PACKAGE_luci-app-passwall=y
-CONFIG_PACKAGE_luci-app-passwall_Transparent_Proxy=y
 CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y
 CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y
-
-# 强制使用 Xray 作为后端，跳过 libev 相关的旧组件
-CONFIG_PACKAGE_passwall_xray-core=y
-CONFIG_PACKAGE_passwall_sing-box=y
-CONFIG_node_v8_arch_x64=y
+# 配合 MosDNS
+CONFIG_PACKAGE_luci-app-mosdns=y
+# L2TP 插件
+CONFIG_PACKAGE_luci-app-xl2tpd=y
+CONFIG_PACKAGE_xl2tpd=y
+CONFIG_PACKAGE_luci-proto-ppp=y
+CONFIG_PACKAGE_luci-app-ipsec-vpnd=y
 EOF
 
-# --- 3. 再次执行链接和索引刷新 ---
-# 确保剩余的好包被系统识别
-cd package/community
-ln -sf ./small/* ../
-cd ../..
-./scripts/feeds update -i
-./scripts/feeds install -a
-# --- 1. 物理删除所有已知的 Rust 插件目录 ---
-# 这些是 small-package 和官方源中最常见的 Rust 项目
-find ./package/ -name "dae" -type d -exec rm -rf {} +
-find ./package/ -name "daed" -type d -exec rm -rf {} +
-find ./package/ -name "luci-app-dae" -type d -exec rm -rf {} +
-find ./package/ -name "luci-app-daed" -type d -exec rm -rf {} +
-
-# --- 2. 强制禁用编译环境中的 Rust 支持 ---
-# 在 .config 中明确关闭 Rust 编译器，防止它因为依赖被误拉取
-sed -i '/CONFIG_PACKAGE_librust/d' .config
-sed -i '/CONFIG_PACKAGE_rust/d' .config
-echo "# CONFIG_PACKAGE_rust is not set" >> .config
-echo "# CONFIG_PACKAGE_librust is not set" >> .config
-
-# --- 3. 针对 PassWall 的调整 ---
-# 确保不勾选任何可能触发 Rust 依赖的后端（比如 dae 模式）
-sed -i '/CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy/s/is not set/y/g' .config
-sed -i '/CONFIG_PACKAGE_luci-app-passwall_dae/d' .config
-echo "# CONFIG_PACKAGE_luci-app-passwall_dae is not set" >> .config
+# 7. 自动补全所有依赖项
 make defconfig
