@@ -25,7 +25,7 @@ find ./package -type d -name "daed" -exec rm -rf {} +
 find ./feeds -type d -name "daed" -exec rm -rf {} +
 
 # 拉取官方最新标准源到 package/daed
-git clone --depth 1 https://github.com/daeuniverse/daed-openwrt.git package/daed
+git clone --depth 1 https://github.com/daeuniverse/daed.git package/daed
 
 # --- 第五部分：环境补丁 ---
 # 设置 Go 代理，防止 daed 编译时下载 Go 包失败
