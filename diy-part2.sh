@@ -9,11 +9,20 @@ cd package/community
 # git clone --depth 1 https://github.com/kenzok8/small-package.git
 git clone --depth 1 https://github.com/kenzok8/jell.git
 
-# 1. 彻底清除旧的、可能带有缓存错误的源码
-rm -rf package/community/jell/daed
+# --- 彻底清除所有 daed 相关的干扰项 ---
+# 无论是在 package 还是在 feeds 目录，只要叫 daed 的全部杀掉
+find ./package -type d -name "daed" -exec rm -rf {} +
+find ./feeds -type d -name "daed" -exec rm -rf {} +
 
-# 2. 从官方维护的源重新拉取到标准路径
-git clone --depth 1 https://github.com/daeuniverse/daed.git package/daed
+# --- 重新拉取到唯一的、干净的路径 ---
+# 直接放在 package/daed，不要嵌套
+git clone --depth 1 https://github.com/daeuniverse/daed-openwrt.git package/daed
+
+# --- 解决编译环境可能的冲突 ---
+# 有些 daed 源码会自带 libcron 这种重复依赖，删掉它让系统用自带的
+find ./package -type d -name "libcron" -exec rm -rf {} +
+
+
 
 # 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
 # 假设你的目录名是 package/small-package
@@ -75,3 +84,6 @@ rm -rf feeds/packages/net/vlmcsd
 # 如果需要 IPsec 加密支持
 # echo "CONFIG_PACKAGE_luci-app-ipsec-vpnd=y" >> .config
 
+# --- 修复依赖索引 ---
+./scripts/feeds update -i
+./scripts/feeds install -a
