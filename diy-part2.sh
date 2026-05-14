@@ -16,7 +16,7 @@ find ./feeds -type d -name "daed" -exec rm -rf {} +
 
 # --- 重新拉取到唯一的、干净的路径 ---
 # 直接放在 package/daed，不要嵌套
-git clone --depth 1 https://github.com/daeuniverse/daed-openwrt.git package/daed
+git clone --depth 1 https://github.com/daeuniverse/daed.git package/daed
 
 # --- 解决编译环境可能的冲突 ---
 # 有些 daed 源码会自带 libcron 这种重复依赖，删掉它让系统用自带的
