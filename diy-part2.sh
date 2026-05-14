@@ -11,20 +11,20 @@ rm -rf package/community/jell
 # 创建目录并拉取
 mkdir -p package/community
 git clone --depth 1 https://github.com/kenzok8/jell.git package/community/jell
-# 删掉那个报错的文件夹
-rm -rf package/community/jell/daed
-# 2. 安全地删除所有 daed 相关残留
-# 使用 -d 判断目录是否存在，防止 find 报错
-if [ -d "package" ]; then
-    find ./package -type d -name "daed" -exec rm -rf {} +
-    # 物理删除那个讨厌的 jell 路径
+
+# --- 第三部分：物理切除 jell 里的 daed (这是你报错的根源) ---
+# 这一步必须在 clone 之后立即执行
+if [ -d "package/community/jell/daed" ]; then
+    echo "Found ghost daed in jell, removing..."
     rm -rf package/community/jell/daed
 fi
 
-if [ -d "feeds" ]; then
-    find ./feeds -type d -name "daed" -exec rm -rf {} +
-fi
-# 拉取官方维护的 daed-openwrt
+# --- 第四部分：重新安装干净的 daed ---
+# 删除所有地方可能残留的 daed 文件夹
+find ./package -type d -name "daed" -exec rm -rf {} +
+find ./feeds -type d -name "daed" -exec rm -rf {} +
+
+# 拉取官方最新标准源到 package/daed
 git clone --depth 1 https://github.com/daeuniverse/daed-openwrt.git package/daed
 
 # 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
