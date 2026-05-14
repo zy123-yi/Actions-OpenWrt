@@ -45,8 +45,8 @@ find ./ -name "luci-app-trojan-plus" -type d -exec rm -rf {} +
 find ./ -name "trojan-go" -type d -exec rm -rf {} +
 
 # 2. 彻底切除 daed 相关（既然你不需要了）
-find ./ -name "daed" -type d -exec rm -rf {} +
-find ./ -name "luci-app-daed" -type d -exec rm -rf {} +
+# find ./ -name "daed" -type d -exec rm -rf {} +
+# find ./ -name "luci-app-daed" -type d -exec rm -rf {} +
 
 # 3. 彻底切除 AdGuardHome 相关（防止 Go 语言环境冲突）
 find ./ -name "luci-app-adguardhome" -type d -exec rm -rf {} +
