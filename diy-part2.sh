@@ -13,7 +13,17 @@ mkdir -p package/community
 git clone --depth 1 https://github.com/kenzok8/jell.git package/community/jell
 # 删掉那个报错的文件夹
 rm -rf package/community/jell/daed
+# 2. 安全地删除所有 daed 相关残留
+# 使用 -d 判断目录是否存在，防止 find 报错
+if [ -d "package" ]; then
+    find ./package -type d -name "daed" -exec rm -rf {} +
+    # 物理删除那个讨厌的 jell 路径
+    rm -rf package/community/jell/daed
+fi
 
+if [ -d "feeds" ]; then
+    find ./feeds -type d -name "daed" -exec rm -rf {} +
+fi
 # 拉取官方维护的 daed-openwrt
 git clone --depth 1 https://github.com/daeuniverse/daed-openwrt.git package/daed
 
