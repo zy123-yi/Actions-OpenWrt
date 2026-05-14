@@ -64,14 +64,14 @@ rm -rf feeds/luci/applications/luci-app-turboacc
 rm -rf feeds/packages/net/vlmcsd
 
 # 5. 在 .config 中强制禁用这些项目（双重保险）
-sed -i '/CONFIG_PACKAGE_luci-app-adguardhome/d' .config
-sed -i '/CONFIG_PACKAGE_luci-app-daed/d' .config
-sed -i '/CONFIG_PACKAGE_luci-app-trojan-plus/d' .config
+# sed -i '/CONFIG_PACKAGE_luci-app-adguardhome/d' .config
+# sed -i '/CONFIG_PACKAGE_luci-app-daed/d' .config
+# sed -i '/CONFIG_PACKAGE_luci-app-trojan-plus/d' .config
 # 在 diy-part2.sh 中追加配置
-echo "CONFIG_PACKAGE_luci-app-xl2tpd=y" >> .config
-echo "CONFIG_PACKAGE_luci-proto-ppp=y" >> .config
-echo "CONFIG_PACKAGE_xl2tpd=y" >> .config
+# echo "CONFIG_PACKAGE_luci-app-xl2tpd=y" >> .config
+# echo "CONFIG_PACKAGE_luci-proto-ppp=y" >> .config
+# echo "CONFIG_PACKAGE_xl2tpd=y" >> .config
 
 # 如果需要 IPsec 加密支持
-echo "CONFIG_PACKAGE_luci-app-ipsec-vpnd=y" >> .config
+# echo "CONFIG_PACKAGE_luci-app-ipsec-vpnd=y" >> .config
 
