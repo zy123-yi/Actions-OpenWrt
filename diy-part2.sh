@@ -25,7 +25,7 @@ find ./package -type d -name "daed" -exec rm -rf {} +
 find ./feeds -type d -name "daed" -exec rm -rf {} +
 
 # 拉取官方最新标准源到 package/daed
-git clone --depth 1 https://github.com/QiuSimons/luci-app-daed.git package/daed
+# git clone --depth 1 https://github.com/QiuSimons/luci-app-daed.git package/daed
 
 # 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
 # 假设你的目录名是 package/small-package
