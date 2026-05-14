@@ -13,7 +13,7 @@ git clone --depth 1 https://github.com/kenzok8/jell.git
 rm -rf package/community/jell/daed
 
 # 2. 从官方维护的源重新拉取到标准路径
-git clone --depth 1 https://github.com/daeuniverse/daed-openwrt.git package/daed
+git clone --depth 1 https://github.com/daeuniverse/daed.git package/daed
 
 # 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
 # 假设你的目录名是 package/small-package
