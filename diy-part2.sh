@@ -12,29 +12,6 @@ rm -rf package/community/jell
 mkdir -p package/community
 git clone --depth 1 https://github.com/kenzok8/jell.git package/community/jell
 
-# --- 第三部分：物理切除 jell 里的 daed (这是你报错的根源) ---
-# 这一步必须在 clone 之后立即执行
-if [ -d "package/community/jell/daed" ]; then
-    echo "Found ghost daed in jell, removing..."
-    rm -rf package/community/jell/daed
-fi
-
-# --- 第四部分：重新安装干净的 daed ---
-# 删除所有地方可能残留的 daed 文件夹
-find ./package -type d -name "daed" -exec rm -rf {} +
-find ./feeds -type d -name "daed" -exec rm -rf {} +
-
-# 拉取官方最新标准源到 package/daed
-git clone --depth 1 https://github.com/daeuniverse/daed.git package/daed
-
-# --- 第五部分：环境补丁 ---
-# 设置 Go 代理，防止 daed 编译时下载 Go 包失败
-export GO111MODULE=on
-export GOPROXY=https://goproxy.cn,direct
-
-# 强制删除可能导致冲突的旧版配置行
-sed -i '/daed/d' .config
-
 
 # 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
 # 假设你的目录名是 package/small-package
