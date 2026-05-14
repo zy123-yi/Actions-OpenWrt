@@ -1,27 +1,39 @@
 #!/bin/bash
 
-# 1. 创建并进入社区插件目录
+# --- 第一部分：进入根目录并清理 ---
+# 确保我们在 OpenWrt 源码根目录（即包含 feeds 和 package 的地方）
+[ -d package ] || cd ..
+
+# --- 第二部分：处理 jell 仓库 ---
+# 先删除旧的 jell（如果存在），防止因文件夹已存在导致 clone 失败
+rm -rf package/community/jell
+
+# 创建目录并拉取
 mkdir -p package/community
-cd package/community
+git clone --depth 1 https://github.com/kenzok8/jell.git package/community/jell
 
-# 2. 拉取 PassWall 插件及依赖 (使用目前活跃的备份源)
-# 这个源通常包含了 luci-app-passwall 及其核心组件
-# git clone --depth 1 https://github.com/kenzok8/small-package.git
-git clone --depth 1 https://github.com/kenzok8/jell.git
+# --- 第三部分：物理切除 jell 里的 daed (这是你报错的根源) ---
+# 这一步必须在 clone 之后立即执行
+if [ -d "package/community/jell/daed" ]; then
+    echo "Found ghost daed in jell, removing..."
+    rm -rf package/community/jell/daed
+fi
 
-# --- 彻底清除所有 daed 相关的干扰项 ---
-# 无论是在 package 还是在 feeds 目录，只要叫 daed 的全部杀掉
+# --- 第四部分：重新安装干净的 daed ---
+# 删除所有地方可能残留的 daed 文件夹
 find ./package -type d -name "daed" -exec rm -rf {} +
 find ./feeds -type d -name "daed" -exec rm -rf {} +
 
-# --- 重新拉取到唯一的、干净的路径 ---
-# 直接放在 package/daed，不要嵌套
-git clone --depth 1 https://github.com/daeuniverse/daed.git package/daed
+# 拉取官方最新标准源到 package/daed
+git clone --depth 1 https://github.com/daeuniverse/daed-openwrt.git package/daed
 
-# --- 解决编译环境可能的冲突 ---
-# 有些 daed 源码会自带 libcron 这种重复依赖，删掉它让系统用自带的
-find ./package -type d -name "libcron" -exec rm -rf {} +
+# --- 第五部分：环境补丁 ---
+# 设置 Go 代理，防止 daed 编译时下载 Go 包失败
+export GO111MODULE=on
+export GOPROXY=https://goproxy.cn,direct
 
+# 强制删除可能导致冲突的旧版配置行
+sed -i '/daed/d' .config
 
 
 # 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
@@ -37,7 +49,7 @@ find ./package -type d -name "libcron" -exec rm -rf {} +
 # rm -rf package/vlmcsd_temp
 
 # 4. 返回主目录
-cd ../..
+# cd ../..
 # 在 diy-part2.sh 的末尾添加
 # echo "CONFIG_PACKAGE_luci-app-passwall=y" >> .config
 # echo "CONFIG_PACKAGE_luci-app-mosdns=y" >> .config
