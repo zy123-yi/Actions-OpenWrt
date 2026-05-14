@@ -8,6 +8,12 @@ cd package/community
 # 这个源通常包含了 luci-app-passwall 及其核心组件
 # git clone --depth 1 https://github.com/kenzok8/small-package.git
 git clone --depth 1 https://github.com/kenzok8/jell.git
+git clone --depth 1 --filter=blob:none --sparse https://github.com/coolsnowwolf/luci.git luci_temp
+cd luci_temp
+git sparse-checkout set applications/luci-app-l2tp-server
+cd ..
+cp -r luci_temp/applications/luci-app-l2tp-server package/community/
+rm -rf luci_temp
 
 # 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
 # 假设你的目录名是 package/small-package
