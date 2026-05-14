@@ -11,7 +11,11 @@ rm -rf package/community/jell
 # 创建目录并拉取
 mkdir -p package/community
 git clone --depth 1 https://github.com/kenzok8/jell.git package/community/jell
+# 删掉那个报错的文件夹
+rm -rf package/community/jell/daed
 
+# 拉取官方维护的 daed-openwrt
+git clone --depth 1 https://github.com/daeuniverse/daed-openwrt.git package/daed
 
 # 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
 # 假设你的目录名是 package/small-package
