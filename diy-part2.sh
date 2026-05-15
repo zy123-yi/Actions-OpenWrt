@@ -18,15 +18,19 @@ if [ -d "package/community/jell/daed" ]; then
     echo "Found ghost daed in jell, removing..."
     rm -rf package/community/jell/daed
 fi
-
+if [ -d "package/community/jell/softethervpn" ]; then
+    echo "Found ghost softethervpn in jell, removing..."
+    rm -rf package/community/jell/softethervpn
+fi
 # --- 第四部分：重新安装干净的 daed ---
 # 删除所有地方可能残留的 daed 文件夹
 find ./package -type d -name "daed" -exec rm -rf {} +
 find ./feeds -type d -name "daed" -exec rm -rf {} +
-
+find ./package -type d -name "softethervpn" -exec rm -rf {} +
+find ./feeds -type d -name "softethervpn" -exec rm -rf {} +
 # 拉取官方最新标准源到 package/daed
 # git clone --depth 1 https://github.com/QiuSimons/luci-app-daed.git package/daed
-
+git clone --depth 1 https://github.com/superzjg/luci-app-softethervpn/tree/main/luci-app-softethervpn.git package/softethervpn
 # 1. 彻底清理掉 small-package 里的 vlmcsd（防止它干扰编译）
 # 假设你的目录名是 package/small-package
 # rm -rf package/communitye/vlmcsd
