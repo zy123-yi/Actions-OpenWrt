@@ -151,8 +151,13 @@ git clone --depth=1 https://github.com/sbwml/luci-app-alist.git package/custom/l
 git clone --depth=1 https://github.com/sbwml/v2ray-geodata.git package/custom/v2ray-geodata
 
 # 4. 精准拉取 Vlmcsd KMS 组件
-git clone --depth=1 https://github.com/mchome/openwrt-vlmcsd.git package/custom/openwrt-vlmcsd
-git clone --depth=1 https://github.com/mchome/luci-app-vlmcsd.git package/custom/luci-app-vlmcsd
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git package/vlmcsd_temp
+cd package/vlmcsd_temp
+git sparse-checkout set vlmcsd luci-app-vlmcsd
+cd ../..
+cp -r package/vlmcsd_temp/vlmcsd package/custom
+cp -r package/vlmcsd_temp/luci-app-vlmcsd package/luci-app-vlmcsd
+rm -rf package/vlmcsd_temp
 # --- 修复依赖索引 ---
 ./scripts/feeds update -i
 ./scripts/feeds install -a
