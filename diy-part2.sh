@@ -109,9 +109,13 @@ find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
 
 #!/bin/bash
 
-# 1. 精准追加 PassWall 的大源（修正写入逻辑，确保地址无误）
-echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
-echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
+# 移除 openwrt feeds 自带的核心库
+rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-libev,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls,haproxy}
+git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
+
+# 移除 openwrt feeds 过时的luci版本
+rm -rf feeds/luci/applications/luci-app-passwall
+git clone https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
 
 # 2. 创建自定义插件目录
 mkdir -p package/custom
