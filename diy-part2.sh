@@ -103,7 +103,25 @@ find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
 
 # 如果需要 IPsec 加密支持
 # echo "CONFIG_PACKAGE_luci-app-ipsec-vpnd=y" >> .config
+#!/bin/bash
 
+# 1. 绝不覆盖原有源，而是用追加（>>）的方式把 PassWall 的官方分支锁进去
+# PassWall 通常作为大源引入更不容易缺失编译依赖
+echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
+echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
+
+# 2. 创建一个专属的自定义插件目录
+mkdir -p package/custom
+
+# 3. 用 git clone 精准拉取你要的特定插件（只拿积木，不占地方）
+# 拉取高级 DNS 解析 Mosdns 及其依赖
+git clone --depth=1 -b mosdns https://github.com/sbwml/luci-app-mosdns.git package/custom/luci-app-mosdns
+
+# 拉取网络加速 Turboacc
+git clone --depth=1 -b turboacc https://github.com/chenmozhijin/turboacc.git package/custom/turboacc
+
+# 拉取 KMS 激活服务 vlmcsd
+git clone --depth=1 -b vlmcsd https://github.com/mchome/luci-app-vlmcsd.git package/custom/luci-app-vlmcsd
 # --- 修复依赖索引 ---
 ./scripts/feeds update -i
 ./scripts/feeds install -a
