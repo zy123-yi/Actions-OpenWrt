@@ -116,6 +116,7 @@ git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/
 # 移除 openwrt feeds 过时的luci版本
 rm -rf feeds/luci/applications/luci-app-passwall
 git clone https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
+rm -rf package/custom/passwall_packages/shadowsocksr-libev
 
 # 2. 创建自定义插件目录
 mkdir -p package/custom
