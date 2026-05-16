@@ -162,4 +162,4 @@ rm -rf package/vlmcsd_temp
 # --- 修复依赖索引 ---
 ./scripts/feeds update -i
 ./scripts/feeds install -a
-# sed -i 's/192.168.2.2/192.168.2.18/g' package/base-files/files/bin/config_generate
+# sed -i 's/192.168.2.18/192.168.2.2/g' package/base-files/files/bin/config_generate
