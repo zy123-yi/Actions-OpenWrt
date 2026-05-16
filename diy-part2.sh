@@ -68,18 +68,7 @@ rm -rf package/community/jell
 
 #!/bin/bash
 
-# 1. 彻底切除 Trojan 相关（解决 Boost 1.89 报错的罪魁祸首）
-find ./ -name "trojan-plus" -type d -exec rm -rf {} +
-find ./ -name "luci-app-trojan-plus" -type d -exec rm -rf {} +
-find ./ -name "trojan-go" -type d -exec rm -rf {} +
 
-# 2. 彻底切除 daed 相关（既然你不需要了）
-# find ./ -name "daed" -type d -exec rm -rf {} +
-# find ./ -name "luci-app-daed" -type d -exec rm -rf {} +
-
-# 3. 彻底切除 AdGuardHome 相关（防止 Go 语言环境冲突）
-find ./ -name "luci-app-adguardhome" -type d -exec rm -rf {} +
-find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
 
 # 4. 解决 25.12 稳定版核心冲突
 # 删掉 small 源中不兼容 APK 模式的旧核心，强制系统使用 sbwml 源中修复过的版本
@@ -141,6 +130,18 @@ if [ -f .config ]; then
     echo "CONFIG_PACKAGE_rust=n" >> .config
     echo "CONFIG_PACKAGE_cargo=n" >> .config
 fi
+# 1. 彻底切除 Trojan 相关（解决 Boost 1.89 报错的罪魁祸首）
+find ./ -name "trojan-plus" -type d -exec rm -rf {} +
+find ./ -name "luci-app-trojan-plus" -type d -exec rm -rf {} +
+find ./ -name "trojan-go" -type d -exec rm -rf {} +
+
+# 2. 彻底切除 daed 相关（既然你不需要了）
+# find ./ -name "daed" -type d -exec rm -rf {} +
+# find ./ -name "luci-app-daed" -type d -exec rm -rf {} +
+
+# 3. 彻底切除 AdGuardHome 相关（防止 Go 语言环境冲突）
+find ./ -name "luci-app-adguardhome" -type d -exec rm -rf {} +
+find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
 # 3. 精准拉取 Mosdns v5 分支及地理数据依赖
 git clone --depth=1 https://github.com/sbwml/luci-app-alist.git package/custom/luci-app-mosdns
 git clone --depth=1 https://github.com/sbwml/v2ray-geodata.git package/custom/v2ray-geodata
