@@ -28,6 +28,9 @@ find ./package -type d -name "daed" -exec rm -rf {} +
 find ./feeds -type d -name "daed" -exec rm -rf {} +
 find ./package -type d -name "mosdns" -exec rm -rf {} +
 find ./feeds -type d -name "mosdns" -exec rm -rf {} +
+find ./package -type d -name "passwall" -exec rm -rf {} +
+find ./feeds -type d -name "passwall" -exec rm -rf {} +
+
 # 拉取官方最新标准源到 package/daed
 # git clone --depth 1 https://github.com/QiuSimons/luci-app-daed.git package/daed
 git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git package/mosdns
