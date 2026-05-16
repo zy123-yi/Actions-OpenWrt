@@ -150,7 +150,7 @@ find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
 git clone --depth=1 https://github.com/sbwml/luci-app-mosdns package/custom/luci-app-mosdns
 # git clone --depth=1 https://github.com/sbwml/v2ray-geodata.git package/custom/v2ray-geodata
 # git clone --depth=1 https://github.com/mufeng05/turboacc.git package/custom/turboacc
-curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
+# curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 # 4. 精准拉取 Vlmcsd KMS 组件
 git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git package/vlmcsd_temp
 cd package/vlmcsd_temp
