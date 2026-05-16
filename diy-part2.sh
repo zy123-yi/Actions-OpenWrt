@@ -142,12 +142,12 @@ if [ -f .config ]; then
     echo "CONFIG_PACKAGE_cargo=n" >> .config
 fi
 # 3. 精准拉取 Mosdns v5 分支及地理数据依赖
-git clone --depth=1 -b v5 https://github.com/sbwml/luci-app-alist.git package/custom/luci-app-mosdns
+git clone --depth=1 https://github.com/sbwml/luci-app-alist.git package/custom/luci-app-mosdns
 git clone --depth=1 https://github.com/sbwml/v2ray-geodata.git package/custom/v2ray-geodata
 
 # 4. 精准拉取 Vlmcsd KMS 组件
-git clone --depth=1 -b master https://github.com/mchome/openwrt-vlmcsd.git package/custom/openwrt-vlmcsd
-git clone --depth=1 -b master https://github.com/mchome/luci-app-vlmcsd.git package/custom/luci-app-vlmcsd
+git clone --depth=1 https://github.com/mchome/openwrt-vlmcsd.git package/custom/openwrt-vlmcsd
+git clone --depth=1 https://github.com/mchome/luci-app-vlmcsd.git package/custom/luci-app-vlmcsd
 # --- 修复依赖索引 ---
 ./scripts/feeds update -i
 ./scripts/feeds install -a
