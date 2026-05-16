@@ -118,6 +118,11 @@ rm -rf feeds/luci/applications/luci-app-passwall
 git clone https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
 rm -rf package/custom/passwall_packages/shadowsocksr-libev
 
+# 2. 强行把 PassWall 菜单里关于 SSR 的勾选项强制剔除，防止配置残留去下载它
+find package/custom/ -name "Makefile" | xargs sed -i '/shadowsocksr-libev/d'
+find package/custom/ -name "Config.in" | xargs sed -i '/shadowsocksr-libev/d'
+# ====================================================================
+
 # 2. 创建自定义插件目录
 mkdir -p package/custom
 
