@@ -6,4 +6,4 @@ echo "src-git routing https://github.com/openwrt/routing.git;openwrt-25.12" >> f
 echo "src-git telephony https://github.com/openwrt/telephony.git;openwrt-25.12" >> feeds.conf.default
 echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
 echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
-echo "src-git mosdns https://github.com/sbwml/luci-app-mosdns.git mosdns" >> feeds.conf.default
+echo "src-git mosdns https://github.com/sbwml/luci-app-mosdns.git;mosdns" >> feeds.conf.default
