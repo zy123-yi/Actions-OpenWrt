@@ -89,8 +89,8 @@ find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
 # rm -rf feeds/small/v2ray-plugin
 
 # 5. 额外清理 Turbo ACC 冲突（防止 Duplicate 报错）
-rm -rf feeds/luci/applications/luci-app-turboacc
-rm -rf feeds/packages/net/vlmcsd
+# rm -rf feeds/luci/applications/luci-app-turboacc
+# rm -rf feeds/packages/net/vlmcsd
 
 # 5. 在 .config 中强制禁用这些项目（双重保险）
 # sed -i '/CONFIG_PACKAGE_luci-app-adguardhome/d' .config
