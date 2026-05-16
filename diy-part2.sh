@@ -149,7 +149,7 @@ find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
 # 3. 精准拉取 Mosdns v5 分支及地理数据依赖
 git clone --depth=1 https://github.com/sbwml/luci-app-mosdns package/custom/luci-app-mosdns
 # git clone --depth=1 https://github.com/sbwml/v2ray-geodata.git package/custom/v2ray-geodata
-git clone --depth=1 https://github.com/imy7/luci-app-turboacc/tree/main/Lienol.git package/custom/turboacc
+git clone --depth=1 https://github.com/mufeng05/turboacc.git package/custom/turboacc
 
 # 4. 精准拉取 Vlmcsd KMS 组件
 git clone --depth 1 --filter=blob:none --sparse https://github.com/kenzok8/jell.git package/vlmcsd_temp
