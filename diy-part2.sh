@@ -122,7 +122,18 @@ rm -rf package/passwall-packages/shadowsocksr-libev
 find package/passwall-packages/ -name "Makefile" | xargs sed -i '/shadowsocksr-libev/d'
 find package/passwall-packages/ -name "Config.in" | xargs sed -i '/shadowsocksr-libev/d'
 # ====================================================================
+# ====================================================================
+# 🦀 【Rust 专项清理】彻底抹除 Rust 依赖与相关配置，加速编译并防翻车
+# ====================================================================
 
+# 1. 从本地自定义口袋中彻底删除可能夹带 Rust 源码的已知冲突组件
+rm -rf package/passwall-packages/brook
+rm -rf package/passwall-packages/chinadns-ng
+
+# 2. 强行在所有 Makefile 和配置文件中抹除对 rust/cargo 的硬性依赖声明
+find package/ -name "Makefile" | xargs sed -i '/\+rust/d'
+find package/ -name "Makefile" | xargs sed -i '/\+cargo/d'
+find package/ -name "Config.in" | xargs sed -i '/rust/d'
 # 2. 创建自定义插件目录
 mkdir -p package/custom
 
