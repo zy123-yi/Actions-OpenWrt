@@ -105,48 +105,47 @@ find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
 # echo "CONFIG_PACKAGE_luci-app-ipsec-vpnd=y" >> .config
 #!/bin/bash
 
-#!/bin/bash
+# 1. 创建自定义插件目录
+mkdir -p package/custom
 
-#!/bin/bash
+# 2. 直接用 git clone 精准拉取 PassWall 组件
+git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git package/custom/passwall_packages
+git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall.git package/custom/passwall_luci
 
-# 移除 openwrt feeds 自带的核心库
-rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-libev,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls,haproxy}
-git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
-
-# 移除 openwrt feeds 过时的luci版本
-rm -rf feeds/luci/applications/luci-app-passwall
-git clone https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
-rm -rf package/passwall-packages/shadowsocksr-libev
+# ====================================================================
+# 🔥 【终极修复】三管齐下，彻底根除 shadowsocksr-libev 的阴魂
+# 1. 物理删除源码文件夹
+rm -rf package/custom/passwall_packages/shadowsocksr-libev
 
 # 2. 强行把 PassWall 菜单里关于 SSR 的勾选项强制剔除，防止配置残留去下载它
-find package/passwall-packages/ -name "Makefile" | xargs sed -i '/shadowsocksr-libev/d'
-find package/passwall-packages/ -name "Config.in" | xargs sed -i '/shadowsocksr-libev/d'
+find package/custom/ -name "Makefile" | xargs sed -i '/shadowsocksr-libev/d'
+find package/custom/ -name "Config.in" | xargs sed -i '/shadowsocksr-libev/d'
 # ====================================================================
 # ====================================================================
 # 🦀 【Rust 专项清理】彻底抹除 Rust 依赖与相关配置，加速编译并防翻车
 # ====================================================================
 
 # 1. 从本地自定义口袋中彻底删除可能夹带 Rust 源码的已知冲突组件
-rm -rf package/passwall-packages/brook
-# rm -rf package/passwall-packages/chinadns-ng
+rm -rf package/custom/passwall_packages/brook
+rm -rf package/custom/passwall_packages/chinadns-ng
 
 # 2. 强行在所有 Makefile 和配置文件中抹除对 rust/cargo 的硬性依赖声明
-find package/ -name "Makefile" | xargs sed -i '/\+rust/d'
-find package/ -name "Makefile" | xargs sed -i '/\+cargo/d'
-find package/ -name "Config.in" | xargs sed -i '/rust/d'
-# 2. 创建自定义插件目录
-mkdir -p package/custom
+find package/custom/ -name "Makefile" | xargs sed -i '/\+rust/d'
+find package/custom/ -name "Makefile" | xargs sed -i '/\+cargo/d'
+find package/custom/ -name "Config.in" | xargs sed -i '/rust/d'
 
-# 3. 精准拉取 Mosdns v5 分支及依赖
-rm -rf feeds/packages/lang/golang
-git clone https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
-git clone https://github.com/sbwml/luci-app-mosdns -b v5 package/mosdns
-git clone https://github.com/sbwml/v2ray-geodata package/v2ray-geodata
+# 3. 如果你在本地保存了 .config 配置文件，强制将其中的 Rust 勾选项彻底关闭
+if [ -f .config ]; then
+    sed -i '/CONFIG_PACKAGE_rust/d' .config
+    sed -i '/CONFIG_PACKAGE_cargo/d' .config
+    echo "CONFIG_PACKAGE_rust=n" >> .config
+    echo "CONFIG_PACKAGE_cargo=n" >> .config
+fi
+# 3. 精准拉取 Mosdns v5 分支及地理数据依赖
+git clone --depth=1 -b v5 https://github.com/sbwml/luci-app-alist.git package/custom/luci-app-mosdns
+git clone --depth=1 https://github.com/sbwml/v2ray-geodata.git package/custom/v2ray-geodata
 
-# 4. 纠正 Turboacc 的分支为 main（彻底解决第一个 fatal 报错）
-git clone --depth=1 https://github.com/chenmozhijin/turboacc.git package/custom/turboacc
-
-# 5. 精准拉取 Vlmcsd 组件
+# 4. 精准拉取 Vlmcsd KMS 组件
 git clone --depth=1 -b master https://github.com/mchome/openwrt-vlmcsd.git package/custom/openwrt-vlmcsd
 git clone --depth=1 -b master https://github.com/mchome/luci-app-vlmcsd.git package/custom/luci-app-vlmcsd
 # --- 修复依赖索引 ---
