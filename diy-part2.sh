@@ -105,23 +105,25 @@ find ./ -name "AdGuardHome" -type d -exec rm -rf {} +
 # echo "CONFIG_PACKAGE_luci-app-ipsec-vpnd=y" >> .config
 #!/bin/bash
 
-# 1. 绝不覆盖原有源，而是用追加（>>）的方式把 PassWall 的官方分支锁进去
-# PassWall 通常作为大源引入更不容易缺失编译依赖
+#!/bin/bash
+
+# 1. 注入 PassWall 官方大源（它包含很多公用网络依赖组件）
 echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
 echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
 
-# 2. 创建一个专属的自定义插件目录
+# 2. 创建自定义插件目录
 mkdir -p package/custom
 
-# 3. 用 git clone 精准拉取你要的特定插件（只拿积木，不占地方）
-# 拉取高级 DNS 解析 Mosdns 及其依赖
-git clone --depth=1 -b mosdns https://github.com/sbwml/luci-app-mosdns.git package/custom/luci-app-mosdns
+# 3. 精准拉取 Mosdns v5 分支，并补齐最新的 golang 编译环境及地理数据依赖
+git clone --depth=1 -b v5 https://github.com/sbwml/luci-app-mosdns.git package/custom/luci-app-mosdns
+git clone --depth=1 https://github.com/sbwml/v2ray-geodata.git package/custom/v2ray-geodata
 
-# 拉取网络加速 Turboacc
-git clone --depth=1 -b turboacc https://github.com/chenmozhijin/turboacc.git package/custom/turboacc
+# 4. 精准拉取 Turboacc（完美适配 25.12 的 firewall4 环境）
+git clone --depth=1 -b master https://github.com/chenmozhijin/turboacc.git package/custom/turboacc
 
-# 拉取 KMS 激活服务 vlmcsd
-git clone --depth=1 -b vlmcsd https://github.com/mchome/luci-app-vlmcsd.git package/custom/luci-app-vlmcsd
+# 5. 精准拉取 Vlmcsd（必须同时拉取其底层服务组件 openwrt-vlmcsd，否则编译后只会有网页没有内核）
+git clone --depth=1 -b master https://github.com/mchome/openwrt-vlmcsd.git package/custom/openwrt-vlmcsd
+git clone --depth=1 -b master https://github.com/mchome/luci-app-vlmcsd.git package/custom/luci-app-vlmcsd
 # --- 修复依赖索引 ---
 ./scripts/feeds update -i
 ./scripts/feeds install -a
