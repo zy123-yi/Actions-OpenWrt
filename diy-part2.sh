@@ -128,7 +128,7 @@ find package/passwall-packages/ -name "Config.in" | xargs sed -i '/shadowsocksr-
 
 # 1. 从本地自定义口袋中彻底删除可能夹带 Rust 源码的已知冲突组件
 rm -rf package/passwall-packages/brook
-# rm -rf package/passwall-packages/chinadns-ng
+rm -rf package/passwall-packages/chinadns-ng
 
 # 2. 强行在所有 Makefile 和配置文件中抹除对 rust/cargo 的硬性依赖声明
 find package/ -name "Makefile" | xargs sed -i '/\+rust/d'
