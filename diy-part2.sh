@@ -123,7 +123,7 @@ git clone https://github.com/sbwml/luci-app-mosdns -b v5 package/mosdns
 git clone https://github.com/sbwml/v2ray-geodata package/v2ray-geodata
 
 # 4. 纠正 Turboacc 的分支为 main（彻底解决第一个 fatal 报错）
-git clone --depth=1 -b main https://github.com/chenmozhijin/turboacc.git package/custom/turboacc
+git clone --depth=1 https://github.com/chenmozhijin/turboacc.git package/custom/turboacc
 
 # 5. 精准拉取 Vlmcsd 组件
 git clone --depth=1 -b master https://github.com/mchome/openwrt-vlmcsd.git package/custom/openwrt-vlmcsd
