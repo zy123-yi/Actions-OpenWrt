@@ -111,7 +111,7 @@ rm -rf package/custom/passwall_packages/chinadns-ng
 rm -rf package/custom/passwall_packages/brook
 
 # 物理删除已失效、会导致下载失败的古老 SSR 组件
-rm -rf package/custom/passwall_packages/shadowsocksr-libev
+rm -rf package/custom/passwall_packages/shadowsocks-libev
 
 # 3. 强行在其余组件的 Makefile 里抹除残留的文本引用（防止系统回头去找它们）
 find package/custom/ -name "Makefile" | xargs sed -i '/shadowsocksr-libev/d'
