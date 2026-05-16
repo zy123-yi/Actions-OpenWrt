@@ -93,6 +93,7 @@ rm -rf package/community/jell
 # 如果需要 IPsec 加密支持
 # echo "CONFIG_PACKAGE_luci-app-ipsec-vpnd=y" >> .config
 #!/bin/bash
+#!/bin/bash
 
 # 1. 创建自定义插件目录
 mkdir -p package/custom
@@ -102,35 +103,38 @@ git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall-package
 git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall.git package/custom/passwall_luci
 
 # ====================================================================
-# 🔥 【终极修复】三管齐下，彻底根除 shadowsocksr-libev 的阴魂
-# 1. 物理删除源码文件夹
+# 🔥 【终极物理清理】直接整箱端走所有带 Rust 和已失效的废弃组件
+# ====================================================================
+# 物理删除 Rust 核心组件（彻底解决你日志里卡 shadowsocks-rust 的问题）
+rm -rf package/custom/passwall_packages/shadowsocks-rust
+rm -rf package/custom/passwall_packages/chinadns-ng
+rm -rf package/custom/passwall_packages/brook
+
+# 物理删除已失效、会导致下载失败的古老 SSR 组件
 rm -rf package/custom/passwall_packages/shadowsocksr-libev
 
-# 2. 强行把 PassWall 菜单里关于 SSR 的勾选项强制剔除，防止配置残留去下载它
+# 3. 强行在其余组件的 Makefile 里抹除残留的文本引用（防止系统回头去找它们）
 find package/custom/ -name "Makefile" | xargs sed -i '/shadowsocksr-libev/d'
+find package/custom/ -name "Makefile" | xargs sed -i '/shadowsocks-rust/d'
+find package/custom/ -name "Makefile" | xargs sed -i '/chinadns-ng/d'
+find package/custom/ -name "Makefile" | xargs sed -i '/brook/d'
+
 find package/custom/ -name "Config.in" | xargs sed -i '/shadowsocksr-libev/d'
-# ====================================================================
-# ====================================================================
-# 🦀 【Rust 专项清理】彻底抹除 Rust 依赖与相关配置，加速编译并防翻车
-# ====================================================================
+find package/custom/ -name "Config.in" | xargs sed -i '/shadowsocks-rust/d'
 
-# 1. 从本地自定义口袋中彻底删除可能夹带 Rust 源码的已知冲突组件
-rm -rf package/custom/passwall_packages/brook
-rm -rf package/custom/passwall_packages/chinadns-ng
-
-# 2. 强行在所有 Makefile 和配置文件中抹除对 rust/cargo 的硬性依赖声明
-find package/custom/ -name "Makefile" | xargs sed -i '/\+rust/d'
-find package/custom/ -name "Makefile" | xargs sed -i '/\+cargo/d'
-find package/custom/ -name "Config.in" | xargs sed -i '/rust/d'
-
-# 3. 如果你在本地保存了 .config 配置文件，强制将其中的 Rust 勾选项彻底关闭
+# 4. 如果存在 .config，彻底封死相关开关
 if [ -f .config ]; then
-    sed -i '/CONFIG_PACKAGE_rust/d' .config
-    sed -i '/CONFIG_PACKAGE_cargo/d' .config
-    echo "CONFIG_PACKAGE_rust=n" >> .config
-    echo "CONFIG_PACKAGE_cargo=n" >> .config
+    sed -i '/CONFIG_PACKAGE_shadowsocks-rust/d' .config
+    sed -i '/CONFIG_PACKAGE_chinadns-ng/d' .config
+    sed -i '/CONFIG_PACKAGE_shadowsocksr-libev/d' .config
+    echo "CONFIG_PACKAGE_shadowsocks-rust=n" >> .config
+    echo "CONFIG_PACKAGE_chinadns-ng=n" >> .config
+    echo "CONFIG_PACKAGE_shadowsocksr-libev=n" >> .config
 fi
-# 1. 彻底切除 Trojan 相关（解决 Boost 1.89 报错的罪魁祸首）
+# ====================================================================
+
+
+
 find ./ -name "trojan-plus" -type d -exec rm -rf {} +
 find ./ -name "luci-app-trojan-plus" -type d -exec rm -rf {} +
 find ./ -name "trojan-go" -type d -exec rm -rf {} +
